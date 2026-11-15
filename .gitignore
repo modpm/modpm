@@ -1,0 +1,13 @@
+# dub
+.dub/
+dub.selections.json
+/modpm
+/modpm.exe
+*.o
+*.obj
+*.a
+*.lib
+*.pdb
+*.exe
+__test__*
+modpm-test-*
