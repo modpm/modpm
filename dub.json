@@ -10,5 +10,11 @@
     "dependencies": {
         "cmd": "0.3.1"
     },
-    "mainSourceFile": "source/app.d"
+    "mainSourceFile": "source/app.d",
+    "libs-posix": [
+        "curl"
+    ],
+    "libs-windows": [
+        "libcurl"
+    ]
 }

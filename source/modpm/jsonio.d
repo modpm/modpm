@@ -95,6 +95,19 @@ final class JsonView
         return value_.type == JSONType.array;
     }
 
+    long integer(string key)
+    {
+        if (isObject)
+            if (auto p = key in value_.object)
+            {
+                if (p.type == JSONType.integer)
+                    return p.integer;
+                if (p.type == JSONType.uinteger)
+                    return cast(long) p.uinteger;
+            }
+        return 0;
+    }
+
     bool isTrue(string key)
     {
         if (isObject)

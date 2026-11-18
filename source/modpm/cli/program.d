@@ -4,12 +4,13 @@ import cmd.help_command;
 import cmd.program;
 
 import modpm.cli.init_cmd;
+import modpm.cli.install_cmd;
 
 enum appVersion = "0.1.0";
 
 final class ModpmProgram : Program
 {
-    this(InitCommand initCommand)
+    this(InitCommand initCommand, InstallCommand installCommand)
     {
         super("modpm");
         description("Package manager for Modrinth projects")
@@ -17,6 +18,7 @@ final class ModpmProgram : Program
             .versionOption("--version", "Show version information")
             .helpOption("-h, --help", "Show help for command")
             .command(initCommand)
+            .command(installCommand)
             .command(new HelpCommand());
     }
 }

@@ -1,5 +1,6 @@
 module modpm.cli.console;
 
+import std.conv : to;
 import std.process : environment;
 import std.stdio : stderr, stdout;
 
@@ -11,16 +12,78 @@ version (Windows)
 }
 else version (Posix)
 {
+    import core.sys.posix.sys.ioctl : TIOCGWINSZ, ioctl, winsize;
     import core.sys.posix.unistd : isatty;
 }
 
 final class Console
 {
     private bool colors_;
+    private bool terminal_;
 
     this()
     {
+        terminal_ = isTerminal();
         colors_ = supportsColor();
+    }
+
+    @property bool terminal() const
+    {
+        return terminal_;
+    }
+
+    @property size_t height() const
+    {
+        version (Posix)
+        {
+            winsize size;
+            if (ioctl(1, TIOCGWINSZ, &size) == 0 && size.ws_row > 0)
+                return size.ws_row;
+        }
+        else version (Windows)
+        {
+            CONSOLE_SCREEN_BUFFER_INFO info;
+            if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
+                return cast(size_t)(info.srWindow.Bottom - info.srWindow.Top + 1);
+        }
+
+        immutable lines = environment.get("LINES");
+        if (lines.length)
+        {
+            try
+                return lines.to!size_t;
+            catch (Exception)
+            {
+            }
+        }
+        return 24;
+    }
+
+    @property size_t width() const
+    {
+        version (Posix)
+        {
+            winsize size;
+            if (ioctl(1, TIOCGWINSZ, &size) == 0 && size.ws_col > 0)
+                return size.ws_col;
+        }
+        else version (Windows)
+        {
+            CONSOLE_SCREEN_BUFFER_INFO info;
+            if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
+                return cast(size_t)(info.srWindow.Right - info.srWindow.Left + 1);
+        }
+
+        immutable columns = environment.get("COLUMNS");
+        if (columns.length)
+        {
+            try
+                return columns.to!size_t;
+            catch (Exception)
+            {
+            }
+        }
+        return 80;
     }
 
     void write(string text)
@@ -82,6 +145,21 @@ final class Console
     private string paint(string code, string text) const
     {
         return colors_ ? "\x1b[" ~ code ~ "m" ~ text ~ "\x1b[39m" : text;
+    }
+
+    private static bool isTerminal()
+    {
+        version (Posix)
+        {
+            return isatty(1) != 0;
+        }
+        else version (Windows)
+        {
+            DWORD mode;
+            return GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mode) != 0;
+        }
+        else
+            return false;
     }
 
     private static bool supportsColor()

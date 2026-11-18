@@ -54,6 +54,15 @@ final class Dependency
     }
 }
 
+final class VersionFile
+{
+    string filename;
+    string url;
+    string sha1;
+    long size;
+    bool primary;
+}
+
 final class VersionInfo
 {
     string id;
@@ -61,7 +70,8 @@ final class VersionInfo
     string versionNumber;
     string versionType;
     string environment;
-    string primarySha1;
+    VersionFile[] files;
+    VersionFile primaryFile;
     string[] loaders;
     string[] gameVersions;
     Dependency[] dependencies;
@@ -79,19 +89,24 @@ final class VersionInfo
         foreach (dependency; json.list("dependencies"))
             v.dependencies ~= Dependency.fromJson(dependency);
 
-        bool foundPrimary;
         foreach (file; json.list("files"))
         {
-            immutable sha1 = file.child("hashes").str("sha1");
-            if (file.isTrue("primary") && !foundPrimary)
-            {
-                v.primarySha1 = sha1;
-                foundPrimary = true;
-            }
-            else if (v.primarySha1.length == 0)
-                v.primarySha1 = sha1;
+            auto f = new VersionFile();
+            f.filename = file.str("filename");
+            f.url = file.str("url");
+            f.sha1 = file.child("hashes").str("sha1");
+            f.size = file.integer("size");
+            f.primary = file.isTrue("primary");
+            v.files ~= f;
+            if (v.primaryFile is null || (f.primary && !v.primaryFile.primary))
+                v.primaryFile = f;
         }
         return v;
+    }
+
+    @property string primarySha1() const
+    {
+        return primaryFile is null ? "" : primaryFile.sha1;
     }
 
     bool isPrimary(string sha1) const
@@ -105,6 +120,7 @@ final class ProjectInfo
     string id;
     string slug;
     string title;
+    string projectType;
 
     this(string id, string slug, string title)
     {
@@ -124,7 +140,9 @@ final class ProjectInfo
 
     static ProjectInfo fromJson(JsonView json)
     {
-        return new ProjectInfo(json.str("id"), json.str("slug"), json.str("title"));
+        auto project = new ProjectInfo(json.str("id"), json.str("slug"), json.str("title"));
+        project.projectType = json.str("project_type");
+        return project;
     }
 }
 
@@ -187,6 +205,41 @@ final class ModrinthClient
             {
                 auto project = ProjectInfo.fromJson(entry);
                 result[project.id] = project;
+            }
+        }
+        return result;
+    }
+
+    VersionInfo[] fetchVersions(string projectId, string[] loaders, string gameVersion)
+    {
+        immutable query = "?loaders=" ~ encodeComponent(JsonObject.stringArray(loaders).toString())
+            ~ "&game_versions=" ~ encodeComponent(JsonObject.stringArray([gameVersion]).toString())
+            ~ "&include_changelog=false";
+        auto response = request(apiBase_ ~ "/project/" ~ encodeComponent(projectId) ~ "/version" ~ query);
+        requireArray(response);
+
+        VersionInfo[] result;
+        foreach (entry; response.items())
+            result ~= VersionInfo.fromJson(entry);
+        return result;
+    }
+
+    VersionInfo[string] fetchVersionsByIds(string[] ids)
+    {
+        VersionInfo[string] result;
+        for (size_t start = 0; start < ids.length; start += maxIdsPerRequest)
+        {
+            size_t end = start + maxIdsPerRequest;
+            if (end > ids.length)
+                end = ids.length;
+
+            immutable idList = JsonObject.stringArray(ids[start .. end]).toString();
+            auto response = request(apiBase_ ~ "/versions?ids=" ~ encodeComponent(idList));
+            requireArray(response);
+            foreach (entry; response.items())
+            {
+                auto version_ = VersionInfo.fromJson(entry);
+                result[version_.id] = version_;
             }
         }
         return result;

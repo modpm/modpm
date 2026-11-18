@@ -1,7 +1,7 @@
 module modpm.manifest;
 
 import std.conv : to;
-import std.file : exists, mkdirRecurse, rename, rmdirRecurse;
+import std.file : exists, mkdirRecurse, readText, rename, rmdirRecurse;
 import std.json : JSONValue;
 import std.path : absolutePath, buildPath, dirName;
 
@@ -37,6 +37,12 @@ final class ScopeConfig : JsonSerializable
         throw new Exception("unknown channel: " ~ level);
     }
 
+    static ScopeConfig fromJson(JsonView json)
+    {
+        return new ScopeConfig(json.str("directory"), json.str("game_version"),
+            json.strings("loaders"), json.strings("channels"), json.str("side").to!Side);
+    }
+
     JSONValue toJson() const
     {
         return new JsonObject()
@@ -60,6 +66,38 @@ final class Entry : JsonSerializable
     string reason;
     string[string] requires;
     bool frozen;
+
+    static Entry fromJson(JsonView json)
+    {
+        auto entry = new Entry();
+        entry.slug = json.str("slug");
+        entry.title = json.str("title");
+        entry.versionId = json.str("version_id");
+        entry.versionNumber = json.str("version_number");
+        entry.filename = json.str("filename");
+        entry.sha1 = json.str("sha1");
+        entry.reason = json.str("reason");
+        foreach (projectId, pinned; json.child("requires").fields())
+            entry.requires[projectId] = pinned.asString();
+        entry.frozen = json.isTrue("frozen");
+        return entry;
+    }
+
+    Entry duplicate() const
+    {
+        auto copy = new Entry();
+        copy.slug = slug;
+        copy.title = title;
+        copy.versionId = versionId;
+        copy.versionNumber = versionNumber;
+        copy.filename = filename;
+        copy.sha1 = sha1;
+        copy.reason = reason;
+        foreach (projectId, pinned; requires)
+            copy.requires[projectId] = pinned;
+        copy.frozen = frozen;
+        return copy;
+    }
 
     JSONValue toJson() const
     {
@@ -98,6 +136,15 @@ final class Manifest : JsonSerializable
     this(ScopeConfig config)
     {
         this.config = config;
+    }
+
+    static Manifest fromJson(JsonView json)
+    {
+        auto manifest = new Manifest(ScopeConfig.fromJson(json.child("scope")));
+        manifest.head = json.integer("head");
+        foreach (projectId, entry; json.child("installed").fields())
+            manifest.installed[projectId] = Entry.fromJson(entry);
+        return manifest;
     }
 
     void add(string projectId, Entry entry)
@@ -154,6 +201,46 @@ final class ScopeDirectory
     string manifestPath() const
     {
         return buildPath(path(), "manifest.json");
+    }
+
+    string baseDir() const
+    {
+        return baseDir_;
+    }
+
+    string downloadsPath() const
+    {
+        return buildPath(path(), "downloads");
+    }
+
+    string planPath() const
+    {
+        return buildPath(path(), "plan.json");
+    }
+
+    string historyPath() const
+    {
+        return buildPath(path(), "history.jsonl");
+    }
+
+    string lockPath() const
+    {
+        return buildPath(path(), "lock");
+    }
+
+    string managedPath(ScopeConfig config) const
+    {
+        return absolutePath(config.directory, baseDir_);
+    }
+
+    Manifest load()
+    {
+        return Manifest.fromJson(JsonView.parse(readText(manifestPath())));
+    }
+
+    void save(Manifest manifest)
+    {
+        new JsonDocument(manifest.toJson()).save(manifestPath());
     }
 
     bool isInitialised() const
