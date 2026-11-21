@@ -7,6 +7,7 @@ import modpm.cli.install_cmd;
 import modpm.cli.install_flow;
 import modpm.cli.program;
 import modpm.cli.progress_view;
+import modpm.cli.stage_spinner;
 import modpm.cli.step_printer;
 import modpm.cli.terminal;
 import modpm.cli.tui_prompter;
@@ -34,7 +35,8 @@ void main(string[] args)
         new FilesystemChecker(),
         new Detector(api, hasher));
     auto downloader = new Downloader(userAgent, hasher, new ProgressView(console));
-    auto installFlow = new InstallFlow(registry, api, downloader, hasher, prompter, console, new StepPrinter(console));
+    auto installFlow = new InstallFlow(registry, api, downloader, hasher, prompter, console, new StepPrinter(console),
+        new StageSpinner(console));
 
     new ModpmProgram(new InitCommand(wizard), new InstallCommand(installFlow)).run(args);
 }

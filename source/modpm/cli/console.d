@@ -23,6 +23,8 @@ final class Console
 
     this()
     {
+        version (Windows)
+            SetConsoleOutputCP(65001);
         terminal_ = isTerminal();
         colors_ = supportsColor();
     }

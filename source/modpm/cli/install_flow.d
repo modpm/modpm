@@ -82,11 +82,14 @@ final class InstallFlow
     private Prompter prompter_;
     private Console console_;
     private TransactionObserver steps_;
+    private PlanObserver stages_;
 
     this(LoaderRegistry registry, ModrinthClient api, Downloader downloader,
-        FileHasher hasher, Prompter prompter, Console console, TransactionObserver steps)
+        FileHasher hasher, Prompter prompter, Console console, TransactionObserver steps,
+        PlanObserver stages)
     {
         steps_ = steps;
+        stages_ = stages;
         registry_ = registry;
         api_ = api;
         downloader_ = downloader;
@@ -126,9 +129,14 @@ final class InstallFlow
         auto runner = new TransactionRunner(scopeDir, manifest, api_, downloader_, hasher_, steps_);
         recover(scopeDir, manifest, runner, kind);
 
-        console_.line("Fetching package information...");
-        auto plan = new Planner(api_, manifest.config, manifest, scopeDir.managedPath(manifest.config))
-            .plan(options.packages, options.skipUnavailable);
+        Plan plan;
+        {
+            scope (failure)
+                stages_.abort();
+            plan = new Planner(api_, manifest.config, manifest,
+                scopeDir.managedPath(manifest.config), stages_)
+                .plan(options.packages, options.skipUnavailable);
+        }
 
         foreach (message; plan.skipped)
             console_.line(console_.yellow("Skipped: " ~ message));

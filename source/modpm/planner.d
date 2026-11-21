@@ -91,6 +91,15 @@ final class Plan
     Metadata metadata;
 }
 
+interface PlanObserver
+{
+    void begin(string active, string done);
+
+    void end();
+
+    void abort();
+}
+
 final class Planner
 {
     private enum maxRounds = 12;
@@ -100,10 +109,13 @@ final class Planner
     private ScopeConfig config_;
     private Manifest manifest_;
     private string managedDir_;
+    private PlanObserver observer_;
     private ProjectInfo[string] projects_;
 
-    this(ModrinthClient api, ScopeConfig config, Manifest manifest, string managedDir)
+    this(ModrinthClient api, ScopeConfig config, Manifest manifest, string managedDir,
+        PlanObserver observer)
     {
+        observer_ = observer;
         api_ = api;
         config_ = config;
         manifest_ = manifest;
@@ -113,18 +125,26 @@ final class Planner
     Plan plan(string[] specs, bool skipUnavailable)
     {
         string[] problems;
+        stageBegin("Looking up packages", "Looked up packages");
         auto requests = requestsFor(specs, problems);
+        stageEnd();
 
         auto metadata = new Metadata();
         auto resolution = new Resolution();
         if (requests.length)
         {
+            stageBegin("Loading package versions", "Loaded package versions");
             foreach (request; requests)
                 metadata.needProject(request.projectId);
             fetchNeeds(metadata);
+            stageEnd();
+
+            stageBegin("Resolving dependencies", "Resolved dependencies");
             resolution = resolveUntilSettled(requests, metadata);
+            stageEnd();
         }
 
+        stageBegin("Preparing the transaction", "Prepared the transaction");
         auto plan = new Plan();
         plan.metadata = metadata;
         auto failures = withNames(resolution.failures);
@@ -150,9 +170,28 @@ final class Planner
             throw new PlanProblems(problems);
 
         fetchPrevious(plan.transaction, metadata);
+        stageEnd();
         plan.transaction.suggestions = suggestionsFor(plan.transaction, metadata);
         plan.projects = projects_;
         return plan;
+    }
+
+    private void stageBegin(string active, string done)
+    {
+        if (observer_ !is null)
+            observer_.begin(active, done);
+    }
+
+    private void stageEnd()
+    {
+        if (observer_ !is null)
+            observer_.end();
+    }
+
+    private void stageAbort()
+    {
+        if (observer_ !is null)
+            observer_.abort();
     }
 
     private Resolution resolveUntilSettled(Request[] requests, Metadata metadata)
@@ -369,7 +408,10 @@ final class Planner
         try
             return collectSuggestions(transaction, metadata);
         catch (Exception)
+        {
+            stageAbort();
             return null;
+        }
     }
 
     private Suggestion[] collectSuggestions(Transaction transaction, Metadata metadata)
@@ -399,6 +441,7 @@ final class Planner
         if (found.length == 0)
             return null;
 
+        stageBegin("Checking optional dependencies", "Checked optional dependencies");
         foreach (candidate; found)
         {
             if (!metadata.knowsProject(candidate.projectId))
@@ -452,6 +495,7 @@ final class Planner
             item.versionNumber = versionNumbers[i];
             suggestion.optional ~= item;
         }
+        stageEnd();
         return ordered;
     }
 
