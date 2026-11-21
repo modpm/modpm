@@ -30,6 +30,7 @@ final class InstallOptions
 {
     string[] packages;
     bool skipUnavailable;
+    bool installSuggests;
     bool yes;
 }
 
@@ -135,7 +136,7 @@ final class InstallFlow
                 stages_.abort();
             plan = new Planner(api_, manifest.config, manifest,
                 scopeDir.managedPath(manifest.config), stages_)
-                .plan(options.packages, options.skipUnavailable);
+                .plan(options.packages, options.skipUnavailable, options.installSuggests);
         }
 
         foreach (message; plan.skipped)
@@ -207,6 +208,7 @@ final class InstallFlow
     {
         auto metadata = plan.metadata;
         Line[] installing;
+        Line[] suggested;
         Line[] dependencies;
         Line[] replacing;
         Line[] marking;
@@ -228,7 +230,9 @@ final class InstallFlow
 
             if (operation.from is null)
             {
-                if (operation.to.reason == "dependency")
+                if (operation.projectId in plan.suggested)
+                    suggested ~= line;
+                else if (operation.to.reason == "dependency")
                     dependencies ~= line;
                 else
                     installing ~= line;
@@ -253,11 +257,11 @@ final class InstallFlow
             }
         }
 
-        foreach (lines; [installing, dependencies, replacing, marking])
+        foreach (lines; [installing, suggested, dependencies, replacing, marking])
             lines.sort!((a, b) => a.title.toLower < b.title.toLower);
 
         auto columns = new Columns();
-        foreach (line; installing ~ dependencies ~ marking)
+        foreach (line; installing ~ suggested ~ dependencies ~ marking)
             columns.fit(line.title.count, line.versionNumber.count, line.channel.count);
         foreach (line; replacing)
         {
@@ -274,12 +278,13 @@ final class InstallFlow
                 ~ "  " ~ console_.bold(Columns.left("Channel", columns.channel))
                 ~ "  " ~ console_.bold(Columns.right("Size", Columns.sizeWidth)));
         printSection("Installing:", installing, columns, false);
+        printSection("Installing suggested packages:", suggested, columns, false);
         printSection("Installing dependencies:", dependencies, columns, false);
         printSection("Replacing:", replacing, columns, true);
         printSection("Marking as installed:", marking, columns, false);
         console_.line();
 
-        printSummary(installing.length + dependencies.length, replacing.length,
+        printSummary(installing.length + suggested.length + dependencies.length, replacing.length,
             marking.length, plan.skipped.length);
         console_.line();
 

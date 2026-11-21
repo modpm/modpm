@@ -84,6 +84,7 @@ private final class OptionalCandidate
 
 final class Plan
 {
+    bool[string] suggested;
     Transaction transaction;
     string[] skipped;
     string[] alreadyInstalled;
@@ -104,6 +105,7 @@ final class Planner
 {
     private enum maxRounds = 12;
     private enum maxParallelRequests = 8;
+    private enum maxSuggestRounds = 4;
 
     private ModrinthClient api_;
     private ScopeConfig config_;
@@ -122,7 +124,7 @@ final class Planner
         managedDir_ = managedDir;
     }
 
-    Plan plan(string[] specs, bool skipUnavailable)
+    Plan plan(string[] specs, bool skipUnavailable, bool installSuggests)
     {
         string[] problems;
         stageBegin("Looking up packages", "Looked up packages");
@@ -131,6 +133,7 @@ final class Planner
 
         auto metadata = new Metadata();
         auto resolution = new Resolution();
+        bool[string] suggested;
         if (requests.length)
         {
             stageBegin("Loading package versions", "Loaded package versions");
@@ -142,11 +145,15 @@ final class Planner
             stageBegin("Resolving dependencies", "Resolved dependencies");
             resolution = resolveUntilSettled(requests, metadata);
             stageEnd();
+
+            if (installSuggests && (resolution.failures.length == 0 || skipUnavailable))
+                resolution = addSuggestions(requests, resolution, metadata, suggested);
         }
 
         stageBegin("Preparing the transaction", "Prepared the transaction");
         auto plan = new Plan();
         plan.metadata = metadata;
+        plan.suggested = suggested;
         auto failures = withNames(resolution.failures);
         if (skipUnavailable)
             plan.skipped = failures;
@@ -192,6 +199,93 @@ final class Planner
     {
         if (observer_ !is null)
             observer_.abort();
+    }
+
+    private Resolution addSuggestions(ref Request[] requests, Resolution resolution,
+        Metadata metadata, ref bool[string] suggested)
+    {
+        bool started = false;
+        foreach (round; 0 .. maxSuggestRounds)
+        {
+            auto added = suggestionRequests(requests, resolution, metadata, started);
+            if (added.length == 0)
+                break;
+
+            foreach (request; added)
+                suggested[request.projectId] = true;
+            requests ~= added;
+            resolution = resolveUntilSettled(requests, metadata);
+        }
+        if (started)
+            stageEnd();
+
+        bool[string] accepted;
+        foreach (selection; resolution.selections)
+            if (selection.wanted)
+                accepted[selection.projectId] = true;
+        foreach (projectId; suggested.keys)
+            if (projectId !in accepted)
+                suggested.remove(projectId);
+        return resolution;
+    }
+
+    private Request[] suggestionRequests(Request[] requests, Resolution resolution,
+        Metadata metadata, ref bool started)
+    {
+        bool[string] known;
+        foreach (request; requests)
+            known[request.projectId] = true;
+        foreach (selection; resolution.selections)
+            known[selection.projectId] = true;
+
+        string[] ids;
+        string[] pins;
+        foreach (selection; resolution.selections)
+        {
+            if (selection.version_ is null)
+                continue;
+            foreach (dependency; selection.version_.dependencies)
+            {
+                if (dependency.type != "optional" || dependency.projectId.length == 0)
+                    continue;
+                if (dependency.projectId in known || dependency.projectId in manifest_.installed)
+                    continue;
+                known[dependency.projectId] = true;
+                ids ~= dependency.projectId;
+                pins ~= dependency.versionId;
+            }
+        }
+        if (ids.length == 0)
+            return null;
+
+        if (!started)
+        {
+            stageBegin("Adding suggested packages", "Added suggested packages");
+            started = true;
+        }
+        foreach (i, projectId; ids)
+        {
+            if (!metadata.knowsProject(projectId))
+                metadata.needProject(projectId);
+            if (pins[i].length && !metadata.knowsVersion(pins[i]))
+                metadata.needVersion(pins[i]);
+        }
+        fetchNeeds(metadata);
+
+        Request[] result;
+        foreach (i, projectId; ids)
+        {
+            string versionNumber;
+            if (pins[i].length)
+            {
+                auto pinned = metadata.version_(pins[i]);
+                if (pinned is null)
+                    continue;
+                versionNumber = pinned.versionNumber;
+            }
+            result ~= new Request(projectId, versionNumber, true);
+        }
+        return result;
     }
 
     private Resolution resolveUntilSettled(Request[] requests, Metadata metadata)

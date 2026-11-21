@@ -13,11 +13,13 @@ final class Request
 {
     string projectId;
     string versionNumber;
+    bool optional;
 
-    this(string projectId, string versionNumber = "")
+    this(string projectId, string versionNumber = "", bool optional = false)
     {
         this.projectId = projectId;
         this.versionNumber = versionNumber;
+        this.optional = optional;
     }
 }
 
@@ -218,6 +220,8 @@ final class Resolver
             }
 
             assigned_ = state.dup;
+            if (request.optional)
+                continue;
             if (gaveUp_)
                 addUnique(resolution.failures, format(
                     "Couldn't find versions of %s that work with the other packages (too many "
