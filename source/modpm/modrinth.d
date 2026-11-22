@@ -2,7 +2,7 @@ module modpm.modrinth;
 
 import core.time : dur;
 import std.conv : to;
-import std.json : JSONException;
+import std.json : JSONException, JSONValue;
 import std.net.curl : CurlException, HTTP, HTTPStatusException;
 import std.uri : encodeComponent;
 
@@ -146,6 +146,52 @@ final class ProjectInfo
     }
 }
 
+final class SearchHit
+{
+    string projectId;
+    string projectType;
+    string slug;
+    string title;
+    string description;
+    string author;
+    string organization;
+    string[] categories;
+    long downloads;
+    long follows;
+
+    @property string ownerName() const
+    {
+        return organization.length ? organization : author;
+    }
+
+    @property string installSpec() const
+    {
+        return slug.length ? slug : projectId;
+    }
+
+    static SearchHit fromJson(JsonView json)
+    {
+        auto hit = new SearchHit();
+        hit.projectId = json.str("project_id");
+        hit.projectType = json.str("project_type");
+        hit.slug = json.str("slug");
+        hit.title = json.str("title");
+        hit.description = json.str("description");
+        hit.author = json.str("author");
+        hit.organization = json.str("organization");
+        hit.categories = json.strings("categories");
+        hit.downloads = json.integer("downloads");
+        hit.follows = json.integer("follows");
+        return hit;
+    }
+}
+
+final class SearchResults
+{
+    long totalHits;
+    SearchHit[] hits;
+}
+
 final class ModrinthClient
 {
     enum maxIdsPerRequest = 740;
@@ -210,6 +256,23 @@ final class ModrinthClient
         return result;
     }
 
+    SearchResults searchProjects(string query, string[][] facets, long limit, long offset, string index)
+    {
+        auto response = request(apiBase_ ~ "/search?query=" ~ encodeComponent(query)
+                ~ "&limit=" ~ limit.to!string
+                ~ "&offset=" ~ offset.to!string
+                ~ "&index=" ~ encodeComponent(index)
+                ~ "&facets=" ~ encodeComponent(encodeFacets(facets)));
+        if (!response.isObject)
+            throw new ModrinthException("unexpected response shape from Modrinth");
+
+        auto results = new SearchResults();
+        results.totalHits = response.integer("total_hits");
+        foreach (entry; response.list("hits"))
+            results.hits ~= SearchHit.fromJson(entry);
+        return results;
+    }
+
     VersionInfo[] fetchVersions(string projectId, string[] loaders, string gameVersion)
     {
         immutable query = "?loaders=" ~ encodeComponent(JsonObject.stringArray(loaders).toString())
@@ -272,6 +335,14 @@ final class ModrinthClient
             return JsonView.parse(cast(string) buffer);
         catch (JSONException e)
             throw new ModrinthException("unreadable response from Modrinth: " ~ e.msg);
+    }
+
+    private static string encodeFacets(string[][] facets)
+    {
+        JSONValue[] groups;
+        foreach (group; facets)
+            groups ~= JsonObject.stringArray(group);
+        return JSONValue(groups).toString();
     }
 
     private static void requireArray(JsonView response)
