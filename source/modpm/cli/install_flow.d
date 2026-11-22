@@ -208,7 +208,6 @@ final class InstallFlow
     {
         auto metadata = plan.metadata;
         Line[] installing;
-        Line[] suggested;
         Line[] dependencies;
         Line[] replacing;
         Line[] marking;
@@ -230,9 +229,7 @@ final class InstallFlow
 
             if (operation.from is null)
             {
-                if (operation.projectId in plan.suggested)
-                    suggested ~= line;
-                else if (operation.to.reason == "dependency")
+                if (operation.to.reason == "dependency")
                     dependencies ~= line;
                 else
                     installing ~= line;
@@ -257,11 +254,11 @@ final class InstallFlow
             }
         }
 
-        foreach (lines; [installing, suggested, dependencies, replacing, marking])
+        foreach (lines; [installing, dependencies, replacing, marking])
             lines.sort!((a, b) => a.title.toLower < b.title.toLower);
 
         auto columns = new Columns();
-        foreach (line; installing ~ suggested ~ dependencies ~ marking)
+        foreach (line; installing ~ dependencies ~ marking)
             columns.fit(line.title.count, line.versionNumber.count, line.channel.count);
         foreach (line; replacing)
         {
@@ -278,13 +275,12 @@ final class InstallFlow
                 ~ "  " ~ console_.bold(Columns.left("Channel", columns.channel))
                 ~ "  " ~ console_.bold(Columns.right("Size", Columns.sizeWidth)));
         printSection("Installing:", installing, columns, false);
-        printSection("Installing suggested packages:", suggested, columns, false);
         printSection("Installing dependencies:", dependencies, columns, false);
         printSection("Replacing:", replacing, columns, true);
         printSection("Marking as installed:", marking, columns, false);
         console_.line();
 
-        printSummary(installing.length + suggested.length + dependencies.length, replacing.length,
+        printSummary(installing.length + dependencies.length, replacing.length,
             marking.length, plan.skipped.length);
         console_.line();
 

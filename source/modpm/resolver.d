@@ -13,13 +13,11 @@ final class Request
 {
     string projectId;
     string versionNumber;
-    bool optional;
 
-    this(string projectId, string versionNumber = "", bool optional = false)
+    this(string projectId, string versionNumber = "")
     {
         this.projectId = projectId;
         this.versionNumber = versionNumber;
-        this.optional = optional;
     }
 }
 
@@ -139,6 +137,7 @@ private final class Need
     string requiredBy;
     string requiredByVersion;
     bool root;
+    bool optional;
     string versionNumber;
 
     this(string projectId, string pinnedVersionId, string requiredBy, string requiredByVersion)
@@ -166,12 +165,14 @@ final class Resolver
     private Manifest manifest_;
     private Metadata metadata_;
     private EnvironmentPolicy policy_;
+    private bool includeOptional_;
     private Choice[string] assigned_;
     private size_t tries_;
     private bool gaveUp_;
 
-    this(ScopeConfig config, Manifest manifest, Metadata metadata)
+    this(ScopeConfig config, Manifest manifest, Metadata metadata, bool includeOptional = false)
     {
+        includeOptional_ = includeOptional;
         config_ = config;
         manifest_ = manifest;
         metadata_ = metadata;
@@ -220,8 +221,6 @@ final class Resolver
             }
 
             assigned_ = state.dup;
-            if (request.optional)
-                continue;
             if (gaveUp_)
                 addUnique(resolution.failures, format(
                     "Couldn't find versions of %s that work with the other packages (too many "
@@ -270,12 +269,15 @@ final class Resolver
         auto rest = pending[1 .. $];
         if (need.root)
             return solveRoot(need, rest, failure, conflict);
+        if (need.optional)
+            return solveOptional(need, rest, failure, conflict);
 
         if (need.pinnedVersionId.length == 0)
         {
             foreach (other; rest)
             {
-                if (!other.root && other.projectId == need.projectId && other.pinnedVersionId.length)
+                if (!other.root && !other.optional && other.projectId == need.projectId
+                    && other.pinnedVersionId.length)
                 {
                     need = new Need(need.projectId, other.pinnedVersionId,
                         other.requiredBy, other.requiredByVersion);
@@ -341,7 +343,7 @@ final class Resolver
             assigned_[need.projectId] = new Choice(candidate, installed, false,
                 need.requiredBy, need.requiredByVersion, pinned);
             bool[string] inner;
-            if (solve(rest ~ requiredNeeds(candidate), failure, inner))
+            if (solve(rest ~ needsOf(candidate), failure, inner))
                 return true;
             assigned_.remove(need.projectId);
             if (gaveUp_)
@@ -354,6 +356,67 @@ final class Resolver
             merge(accumulated, inner, need.projectId);
         }
 
+        if (need.requiredBy.length)
+            accumulated[need.requiredBy] = true;
+        conflict = accumulated;
+        return false;
+    }
+
+    private bool solveOptional(Need need, Need[] rest, ref string failure, ref bool[string] conflict)
+    {
+        if (need.projectId in assigned_)
+            return solve(rest, failure, conflict);
+
+        auto installed = installedOf(need.projectId);
+        if (installed !is null)
+        {
+            assigned_[need.projectId] = new Choice(null, installed, false,
+                need.requiredBy, need.requiredByVersion);
+            if (solve(rest, failure, conflict))
+                return true;
+            assigned_.remove(need.projectId);
+            if (need.projectId in conflict)
+            {
+                conflict.remove(need.projectId);
+                if (need.requiredBy.length)
+                    conflict[need.requiredBy] = true;
+            }
+            return false;
+        }
+
+        string ignored;
+        bool[string] accumulated;
+        foreach (candidate; dependencyCandidates(need, ignored))
+        {
+            bool[string] involved;
+            if (conflictOf(candidate, involved).length)
+            {
+                merge(accumulated, involved, need.projectId);
+                continue;
+            }
+
+            assigned_[need.projectId] = new Choice(candidate, null, false,
+                need.requiredBy, need.requiredByVersion, need.pinnedVersionId.length > 0);
+            bool[string] inner;
+            if (solve(rest ~ needsOf(candidate), failure, inner))
+                return true;
+            assigned_.remove(need.projectId);
+            if (gaveUp_)
+                return false;
+            if (need.projectId !in inner)
+            {
+                conflict = inner;
+                return false;
+            }
+            merge(accumulated, inner, need.projectId);
+        }
+
+        bool[string] skipped;
+        if (solve(rest, failure, skipped))
+            return true;
+        if (gaveUp_)
+            return false;
+        merge(accumulated, skipped, need.projectId);
         if (need.requiredBy.length)
             accumulated[need.requiredBy] = true;
         conflict = accumulated;
@@ -377,7 +440,7 @@ final class Resolver
 
             assigned_[need.projectId] = new Choice(candidate, installed, true);
             bool[string] inner;
-            if (solve(rest ~ requiredNeeds(candidate), failure, inner))
+            if (solve(rest ~ needsOf(candidate), failure, inner))
                 return true;
             assigned_.remove(need.projectId);
             if (gaveUp_)
@@ -627,6 +690,24 @@ final class Resolver
             if (dependency.type == "required" && dependency.projectId.length)
                 result ~= new Need(dependency.projectId, dependency.versionId,
                     v.projectId, v.versionNumber);
+        return result;
+    }
+
+    private Need[] needsOf(VersionInfo v)
+    {
+        auto result = requiredNeeds(v);
+        if (!includeOptional_)
+            return result;
+
+        foreach (dependency; v.dependencies)
+        {
+            if (dependency.type != "optional" || dependency.projectId.length == 0)
+                continue;
+            auto need = new Need(dependency.projectId, dependency.versionId,
+                v.projectId, v.versionNumber);
+            need.optional = true;
+            result ~= need;
+        }
         return result;
     }
 
