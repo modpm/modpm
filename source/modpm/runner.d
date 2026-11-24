@@ -120,14 +120,22 @@ final class TransactionRunner
                     operation.to.versionNumber));
         }
 
-        string[] steps = ["Verify package files"];
+        bool verifies = false;
+        foreach (operation; work)
+            if (operation.placesFile)
+                verifies = true;
+
+        string[] steps;
+        if (verifies)
+            steps ~= "Verify package files";
         foreach (operation; work)
             steps ~= describe(operation);
         steps ~= "Update manifest";
         if (observer_ !is null)
         {
             observer_.begin(steps);
-            observer_.completed(verified);
+            if (verifies)
+                observer_.completed(verified);
         }
 
         foreach (operation; work)

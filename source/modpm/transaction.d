@@ -11,6 +11,7 @@ final class Operation : JsonSerializable
     string projectId;
     Entry from;
     Entry to;
+    bool unused;
 
     this(string projectId, Entry from, Entry to)
     {
@@ -29,13 +30,24 @@ final class Operation : JsonSerializable
         return from !is null && (to is null || from.filename != to.filename);
     }
 
+    static Operation removal(string projectId, Entry entry, bool unused = false)
+    {
+        auto from = entry.duplicate();
+        from.frozen = false;
+        auto operation = new Operation(projectId, from, null);
+        operation.unused = unused;
+        return operation;
+    }
+
     static Operation fromJson(JsonView json)
     {
         auto before = json.child("from");
         auto after = json.child("to");
-        return new Operation(json.str("project_id"),
+        auto operation = new Operation(json.str("project_id"),
             before.isObject ? Entry.fromJson(before) : null,
             after.isObject ? Entry.fromJson(after) : null);
+        operation.unused = json.isTrue("unused");
+        return operation;
     }
 
     JSONValue toJson() const
@@ -49,6 +61,8 @@ final class Operation : JsonSerializable
             json.putJson("to", to.toJson());
         else
             json.putNull("to");
+        if (unused)
+            json.putFlag("unused", true);
         return json.build();
     }
 }
@@ -152,6 +166,19 @@ final class Transaction : JsonSerializable
     void save(string path)
     {
         new JsonDocument(toJson()).save(path);
+    }
+
+    Manifest stateAfter(Manifest manifest)
+    {
+        auto state = manifest.snapshot();
+        foreach (operation; operations)
+        {
+            if (operation.to is null)
+                state.installed.remove(operation.projectId);
+            else
+                state.installed[operation.projectId] = operation.to;
+        }
+        return state;
     }
 
     private JSONValue suggestionsJson() const

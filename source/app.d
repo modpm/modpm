@@ -4,11 +4,12 @@ import modpm.cli.console;
 import modpm.cli.init_cmd;
 import modpm.cli.init_wizard;
 import modpm.cli.install_cmd;
-import modpm.cli.install_flow;
+import modpm.cli.remove_cmd;
 import modpm.cli.program;
 import modpm.cli.progress_view;
 import modpm.cli.stage_spinner;
 import modpm.cli.step_printer;
+import modpm.cli.transaction_executor;
 import modpm.cli.terminal;
 import modpm.cli.tui_prompter;
 import modpm.detect;
@@ -35,8 +36,10 @@ void main(string[] args)
         new FilesystemChecker(),
         new Detector(api, hasher));
     auto downloader = new Downloader(userAgent, hasher, new ProgressView(console));
-    auto installFlow = new InstallFlow(registry, api, downloader, hasher, prompter, console, new StepPrinter(console),
-        new StageSpinner(console));
+    auto steps = new StepPrinter(console);
+    auto executor = new TransactionExecutor(registry, api, downloader, hasher, prompter, console,
+        steps);
 
-    new ModpmProgram(new InitCommand(wizard), new InstallCommand(installFlow)).run(args);
+    new ModpmProgram(new InitCommand(wizard), new InstallCommand(executor, api, new StageSpinner(console)),
+        new RemoveCommand(executor)).run(args);
 }

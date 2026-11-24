@@ -1,31 +1,21 @@
 module modpm.planner;
 
 import std.algorithm.sorting : sort;
-import std.array : join, replace;
+import std.algorithm.searching : canFind;
+import std.array : replace;
 import std.exception : enforce;
-import std.file : exists;
 import std.parallelism : TaskPool;
 import std.algorithm.comparison : min;
 import std.format : format;
-import std.path : buildPath, extension;
-import std.string : indexOf, lastIndexOf;
+import std.path : extension;
+import std.string : indexOf;
 import std.uni : toLower;
 
 import modpm.manifest;
 import modpm.modrinth;
 import modpm.resolver;
 import modpm.transaction;
-
-class PlanProblems : Exception
-{
-    string[] problems;
-
-    this(string[] problems, string file = __FILE__, size_t line = __LINE__)
-    {
-        super(problems.join("\n"), file, line);
-        this.problems = problems;
-    }
-}
+import modpm.transaction_builder;
 
 final class FileNamer
 {
@@ -82,10 +72,18 @@ private final class OptionalCandidate
     }
 }
 
+final class PlanRequest
+{
+    Request[] install;
+    ProjectInfo[string] projects;
+    string[] remove;
+    bool installSuggests;
+}
+
 final class Plan
 {
     Transaction transaction;
-    string[] skipped;
+    string[] unavailable;
     string[] alreadyInstalled;
     ProjectInfo[string] projects;
     Metadata metadata;
@@ -108,6 +106,7 @@ final class Planner
     private ModrinthClient api_;
     private ScopeConfig config_;
     private Manifest manifest_;
+    private Manifest base_;
     private string managedDir_;
     private PlanObserver observer_;
     private bool installSuggests_;
@@ -123,21 +122,27 @@ final class Planner
         managedDir_ = managedDir;
     }
 
-    Plan plan(string[] specs, bool skipUnavailable, bool installSuggests)
+    Plan plan(PlanRequest request)
     {
-        installSuggests_ = installSuggests;
+        scope (failure)
+            stageAbort();
+        installSuggests_ = request.installSuggests;
+        foreach (id, project; request.projects)
+            projects_[id] = project;
         string[] problems;
-        stageBegin("Looking up packages", "Looked up packages");
-        auto requests = requestsFor(specs, problems);
-        stageEnd();
 
+        base_ = manifest_.snapshot();
+        foreach (projectId; request.remove)
+            base_.installed.remove(projectId);
+
+        auto requests = request.install;
         auto metadata = new Metadata();
         auto resolution = new Resolution();
         if (requests.length)
         {
             stageBegin("Loading package versions", "Loaded package versions");
-            foreach (request; requests)
-                metadata.needProject(request.projectId);
+            foreach (item; requests)
+                metadata.needProject(item.projectId);
             fetchNeeds(metadata);
             stageEnd();
 
@@ -149,15 +154,11 @@ final class Planner
         stageBegin("Preparing the transaction", "Prepared the transaction");
         auto plan = new Plan();
         plan.metadata = metadata;
-        auto failures = withNames(resolution.failures);
-        if (skipUnavailable)
-            plan.skipped = failures;
-        else
-            problems ~= failures;
+        plan.unavailable = withNames(resolution.failures);
 
         foreach (projectId; resolution.alreadyInstalled)
         {
-            auto entry = manifest_.installed[projectId];
+            auto entry = base_.installed[projectId];
             plan.alreadyInstalled ~= entry.title ~ " " ~ entry.versionNumber;
         }
 
@@ -166,10 +167,10 @@ final class Planner
             ids ~= selection.projectId;
         ensureProjects(ids);
 
-        plan.transaction = buildTransaction(resolution, problems);
-        checkFileNames(plan.transaction, problems);
-        if (problems.length)
-            throw new PlanProblems(problems);
+        auto builder = buildTransaction(resolution, problems);
+        foreach (projectId; request.remove)
+            builder.add(Operation.removal(projectId, manifest_.installed[projectId]));
+        plan.transaction = builder.build(problems);
 
         fetchPrevious(plan.transaction, metadata);
         stageEnd();
@@ -200,79 +201,12 @@ final class Planner
     {
         foreach (round; 0 .. maxRounds)
         {
-            auto resolution = new Resolver(config_, manifest_, metadata, installSuggests_).resolve(requests);
+            auto resolution = new Resolver(config_, base_, metadata, installSuggests_).resolve(requests);
             if (!metadata.hasNeeds())
                 return resolution;
             fetchNeeds(metadata);
         }
         throw new Exception("the dependency resolution didn't settle");
-    }
-
-    private Request[] requestsFor(string[] specs, ref string[] problems)
-    {
-        bool[string] wanted;
-        foreach (spec; specs)
-        {
-            wanted[spec] = true;
-            immutable at = spec.lastIndexOf('@');
-            if (at > 0)
-                wanted[spec[0 .. at]] = true;
-        }
-
-        ProjectInfo[string] byId;
-        ProjectInfo[string] bySlug;
-        foreach (id, project; api_.fetchProjects(wanted.keys))
-        {
-            projects_[id] = project;
-            byId[id] = project;
-            bySlug[project.slug.toLower] = project;
-        }
-
-        ProjectInfo lookup(string key)
-        {
-            if (auto project = key in byId)
-                return *project;
-            if (auto project = key.toLower in bySlug)
-                return *project;
-            return null;
-        }
-
-        Request[] requests;
-        bool[string] seen;
-        foreach (spec; specs)
-        {
-            ProjectInfo project;
-            string versionNumber;
-            immutable at = spec.lastIndexOf('@');
-            if (at > 0)
-            {
-                project = lookup(spec[0 .. at]);
-                versionNumber = spec[at + 1 .. $];
-            }
-            if (project is null)
-            {
-                project = lookup(spec);
-                versionNumber = "";
-            }
-            if (project is null)
-            {
-                problems ~= format("no such project: %s", spec);
-                continue;
-            }
-            if (project.projectType == "modpack")
-            {
-                problems ~= format("%s is a modpack, which modpm doesn't support", project.displayName);
-                continue;
-            }
-            if (project.id in seen)
-            {
-                problems ~= format("%s is listed twice", project.displayName);
-                continue;
-            }
-            seen[project.id] = true;
-            requests ~= new Request(project.id, versionNumber);
-        }
-        return requests;
     }
 
     private void fetchNeeds(Metadata metadata)
@@ -308,14 +242,13 @@ final class Planner
         metadata.clearNeeds();
     }
 
-    private Transaction buildTransaction(Resolution resolution, ref string[] problems)
+    private TransactionBuilder buildTransaction(Resolution resolution, ref string[] problems)
     {
         auto namer = new FileNamer();
-        auto transaction = new Transaction();
-        transaction.id = manifest_.head + 1;
+        auto builder = new TransactionBuilder(manifest_, managedDir_);
 
         bool[string] present;
-        foreach (projectId; manifest_.installed.keys)
+        foreach (projectId; base_.installed.keys)
             present[projectId] = true;
         foreach (selection; resolution.selections)
             present[selection.projectId] = true;
@@ -361,51 +294,15 @@ final class Planner
                     if (dependency.type == "required")
                         to.requires[dependency.projectId] = dependency.versionId;
                     else if (dependency.type == "optional" && dependency.projectId in present
-                        && dependency.projectId !in to.requires)
-                        to.requires[dependency.projectId] = "";
+                        && dependency.projectId !in to.requires
+                        && !to.suggests.canFind(dependency.projectId))
+                        to.suggests ~= dependency.projectId;
                 }
+                to.suggests.sort();
             }
-            transaction.operations ~= new Operation(selection.projectId, from, to);
+            builder.add(new Operation(selection.projectId, from, to));
         }
-        return transaction;
-    }
-
-    private void checkFileNames(Transaction transaction, ref string[] problems)
-    {
-        bool[string] changed;
-        bool[string] freed;
-        foreach (operation; transaction.operations)
-        {
-            changed[operation.projectId] = true;
-            if (operation.removesOldFile)
-                freed[operation.from.filename.toLower] = true;
-        }
-
-        string[string] taken;
-        foreach (projectId, entry; manifest_.installed)
-            if (projectId !in changed)
-                taken[entry.filename.toLower] = entry.title;
-
-        foreach (operation; transaction.operations)
-        {
-            if (!operation.placesFile)
-                continue;
-            if (operation.from !is null && operation.from.filename == operation.to.filename)
-                continue;
-
-            immutable key = operation.to.filename.toLower;
-            if (auto owner = key in taken)
-            {
-                problems ~= format("%s would use the file name %s, which %s already has",
-                    operation.to.title, operation.to.filename, *owner);
-                continue;
-            }
-            taken[key] = operation.to.title;
-
-            if (key !in freed && exists(buildPath(managedDir_, operation.to.filename)))
-                problems ~= format("%s already exists in the directory and isn't managed by modpm",
-                    operation.to.filename);
-        }
+        return builder;
     }
 
     private void fetchPrevious(Transaction transaction, Metadata metadata)
@@ -414,8 +311,13 @@ final class Planner
         foreach (operation; transaction.operations)
             if (operation.from !is null && !metadata.knowsVersion(operation.from.versionId))
                 ids ~= operation.from.versionId;
-        if (ids.length)
+        if (ids.length == 0)
+            return;
+        try
             metadata.addVersions(ids, api_.fetchVersionsByIds(ids));
+        catch (ModrinthException)
+        {
+        }
     }
 
     private Suggestion[] suggestionsFor(Transaction transaction, Metadata metadata)
@@ -431,7 +333,7 @@ final class Planner
 
     private Suggestion[] collectSuggestions(Transaction transaction, Metadata metadata)
     {
-        auto state = stateAfter(transaction);
+        auto state = transaction.stateAfter(manifest_);
 
         OptionalCandidate[] found;
         foreach (operation; transaction.operations)
@@ -524,22 +426,6 @@ final class Planner
             fetchNeeds(metadata);
         }
         return false;
-    }
-
-    private Manifest stateAfter(Transaction transaction)
-    {
-        auto state = new Manifest(manifest_.config);
-        state.head = manifest_.head;
-        foreach (projectId, entry; manifest_.installed)
-            state.installed[projectId] = entry;
-        foreach (operation; transaction.operations)
-        {
-            if (operation.to is null)
-                state.installed.remove(operation.projectId);
-            else
-                state.installed[operation.projectId] = operation.to;
-        }
-        return state;
     }
 
     private void ensureProjects(string[] ids)

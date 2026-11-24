@@ -65,6 +65,7 @@ final class Entry : JsonSerializable
     string sha1;
     string reason;
     string[string] requires;
+    string[] suggests;
     bool frozen;
 
     static Entry fromJson(JsonView json)
@@ -79,6 +80,7 @@ final class Entry : JsonSerializable
         entry.reason = json.str("reason");
         foreach (projectId, pinned; json.child("requires").fields())
             entry.requires[projectId] = pinned.asString();
+        entry.suggests = json.strings("suggests");
         entry.frozen = json.isTrue("frozen");
         return entry;
     }
@@ -95,6 +97,8 @@ final class Entry : JsonSerializable
         copy.reason = reason;
         foreach (projectId, pinned; requires)
             copy.requires[projectId] = pinned;
+        foreach (projectId; suggests)
+            copy.suggests ~= projectId;
         copy.frozen = frozen;
         return copy;
     }
@@ -119,6 +123,8 @@ final class Entry : JsonSerializable
             .putString("sha1", sha1)
             .putString("reason", reason)
             .putJson("requires", requiresJson.build());
+        if (suggests.length)
+            json.putStrings("suggests", suggests);
         if (frozen)
             json.putFlag("frozen", true);
         return json.build();
@@ -150,6 +156,15 @@ final class Manifest : JsonSerializable
     void add(string projectId, Entry entry)
     {
         installed[projectId] = entry;
+    }
+
+    Manifest snapshot()
+    {
+        auto copy = new Manifest(config);
+        copy.head = head;
+        foreach (projectId, entry; installed)
+            copy.installed[projectId] = entry;
+        return copy;
     }
 
     JSONValue toJson() const
