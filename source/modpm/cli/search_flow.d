@@ -64,18 +64,24 @@ final class SearchFlow
     private int execute(SearchOptions options, string startDir)
     {
         auto scopeDir = ScopeDirectory.findEnclosing(startDir);
-        enforce(scopeDir !is null, "there is no modpm scope here. Run `modpm init` first.");
+        immutable haveScope = scopeDir !is null;
 
-        auto manifest = scopeDir.load();
-        auto config = manifest.config;
-        immutable kind = registry_.kindOf(config.loaders);
+        ScopeConfig config;
+        Kind kind;
+        string[][] facets;
+        if (haveScope)
+        {
+            config = scopeDir.load().config;
+            kind = registry_.kindOf(config.loaders);
+            facets = compatibilityFacets(config, kind);
+        }
+
         immutable limit = parseLimit(options.limitText);
         immutable pageNumber = parsePage(options.pageText);
         immutable offset = (pageNumber - 1) * limit;
         immutable sort = parseSort(options.sortText);
         auto categories = parseCategories(options.categories);
 
-        auto facets = compatibilityFacets(config, kind);
         if (categories.length)
         {
             string[] categoryGroup;
@@ -90,9 +96,11 @@ final class SearchFlow
         {
             if (pageNumber > 1 && results.totalHits > 0)
                 console_.line(format("No results on page %s.", pageNumber));
-            else
+            else if (haveScope)
                 console_.line(format("No compatible %s found for \"%s\".",
                         registry_.kindName(kind).toLower, options.query));
+            else
+                console_.line(format("No packages found for \"%s\".", options.query));
             return ExitCode.ok;
         }
 
@@ -103,7 +111,7 @@ final class SearchFlow
             output.put('\n');
         }
 
-        printHeader(results, options, config, kind, limit, pageNumber, &emit);
+        printHeader(results, options, config, kind, haveScope, limit, pageNumber, &emit);
         foreach (i, hit; results.hits)
         {
             if (i > 0)
@@ -220,25 +228,33 @@ final class SearchFlow
     }
 
     private void printHeader(SearchResults results, SearchOptions options,
-        ScopeConfig config, Kind kind, long limit, long pageNumber, void delegate(string) emit)
+        ScopeConfig config, Kind kind, bool haveScope, long limit, long pageNumber,
+        void delegate(string) emit)
     {
-        string loaderNames;
-        foreach (i, loader; config.loaders)
-        {
-            auto known = registry_.find(loader);
-            immutable name = known is null ? loader : known.name;
-            loaderNames ~= i == 0 ? name : ", " ~ name;
-        }
-
         immutable count = results.totalHits == results.hits.length
             ? formatCount(results.totalHits)
             : format("%s of %s", formatCount(results.hits.length), formatCount(results.totalHits));
         immutable maxPage = (results.totalHits + limit - 1) / limit;
-        emit(console_.bold(format("%s %s for \"%s\"",
-                count, registry_.kindName(kind).toLower, options.query))
-                ~ " " ~ console_.dim(format("(page %s of %s)", pageNumber, maxPage)));
-        emit(console_.dim(format("compatible with %s on %s (%s side)",
-                loaderNames, config.gameVersion, config.side.to!string)));
+        if (haveScope)
+        {
+            string loaderNames;
+            foreach (i, loader; config.loaders)
+            {
+                auto known = registry_.find(loader);
+                immutable name = known is null ? loader : known.name;
+                loaderNames ~= i == 0 ? name : ", " ~ name;
+            }
+            emit(console_.bold(format("%s %s for \"%s\"",
+                    count, registry_.kindName(kind).toLower, options.query))
+                    ~ " " ~ console_.dim(format("(page %s of %s)", pageNumber, maxPage)));
+            emit(console_.dim(format("compatible with %s on %s (%s side)",
+                    loaderNames, config.gameVersion, config.side.to!string)));
+        }
+        else
+        {
+            emit(console_.bold(format("%s packages for \"%s\"", count, options.query))
+                    ~ " " ~ console_.dim(format("(page %s of %s)", pageNumber, maxPage)));
+        }
         emit("");
     }
 
