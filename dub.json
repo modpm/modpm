@@ -1,21 +1,23 @@
 {
-    "name": "modpm",
-    "description": "Package manager for Modrinth projects",
-    "license": "GPL-3.0-only",
-    "targetType": "executable",
-    "targetName": "modpm",
-    "stringImportPaths": [ "." ],
-    "sourcePaths": [
-        "source"
-    ],
-    "dependencies": {
-        "cmd": "0.3.1"
-    },
-    "mainSourceFile": "source/app.d",
-    "libs-posix": [
-        "curl"
-    ],
-    "libs-windows": [
-        "libcurl"
-    ]
+	"dependencies": {
+		"cmd": "0.4.0"
+	},
+	"description": "Package manager for Modrinth projects",
+	"libs-posix": [
+		"curl"
+	],
+	"libs-windows": [
+		"libcurl"
+	],
+	"license": "GPL-3.0-only",
+	"mainSourceFile": "source/app.d",
+	"name": "modpm",
+	"sourcePaths": [
+		"source"
+	],
+	"stringImportPaths": [
+		"."
+	],
+	"targetName": "modpm",
+	"targetType": "executable"
 }
