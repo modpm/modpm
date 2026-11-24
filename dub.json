@@ -4,6 +4,7 @@
     "license": "GPL-3.0-only",
     "targetType": "executable",
     "targetName": "modpm",
+    "stringImportPaths": [ "." ],
     "sourcePaths": [
         "source"
     ],
