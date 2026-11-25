@@ -180,11 +180,7 @@ final class InitWizard
 
         if (flags.side.length)
         {
-            Side side;
-            try
-                side = flags.side.to!Side;
-            catch (ConvException)
-                throw new Exception("--side must be client or server");
+            Side side = flags.side.to!Side;
             enforce(allowed.canFind(side), format("%s can only run on: %s",
                     registry_.kindName(kind), sideNames(allowed)));
             return side;
@@ -221,11 +217,7 @@ final class InitWizard
     private string chooseChannel(InitFlags flags)
     {
         if (flags.channel.length)
-        {
-            enforce(ScopeConfig.channelOrder.canFind(flags.channel),
-                "--channel must be release, beta or alpha");
             return flags.channel;
-        }
 
         string[] labels = [
             "Stable only",
