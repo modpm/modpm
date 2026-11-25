@@ -35,10 +35,6 @@ final class SearchFlow
         "unknown",
     ];
 
-    private enum sortCriteria = [
-        "relevance", "downloads", "follows", "newest", "updated",
-    ];
-
     private ModrinthClient api_;
     private Console console_;
     private LoaderRegistry registry_;
@@ -79,7 +75,6 @@ final class SearchFlow
         immutable limit = parseLimit(options.limitText);
         immutable pageNumber = parsePage(options.pageText);
         immutable offset = (pageNumber - 1) * limit;
-        immutable sort = parseSort(options.sortText);
         auto categories = parseCategories(options.categories);
 
         if (categories.length)
@@ -90,7 +85,7 @@ final class SearchFlow
             facets ~= categoryGroup;
         }
 
-        auto results = api_.searchProjects(options.query, facets, limit, offset, sort);
+        auto results = api_.searchProjects(options.query, facets, limit, offset, options.sortText);
 
         if (results.hits.length == 0)
         {
@@ -159,18 +154,6 @@ final class SearchFlow
             throw new Exception("invalid --page value: " ~ text);
         enforce(value >= 1, "--page must be at least 1");
         return value;
-    }
-
-    private static string parseSort(string text)
-    {
-        if (!text.length)
-            return "relevance";
-
-        immutable sort = text.toLower;
-        enforce(sortCriteria.canFind(sort),
-            "invalid --sort value: " ~ text
-                ~ " (expected one of: " ~ sortCriteria.join(", ") ~ ")");
-        return sort;
     }
 
     private static string[] parseCategories(string[] values)

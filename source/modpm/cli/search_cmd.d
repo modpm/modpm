@@ -17,10 +17,10 @@ final class SearchCommand : Command
         super("search")
             .description("Search Modrinth for packages compatible with this scope")
             .argument("<terms...>", "Search terms")
-            .option("--limit [count]", "Maximum number of results per page", "50")
-            .option("--page [number]", "Page of results to show", "1")
-            .option("--sort [criterion]", "Sort results by: relevance, downloads, follows, newest, updated")
-            .option("--category [name]", "Only show results in the given category, e.g. optimization; repeatable and comma-separated")
+            .option("--limit [count:int]", "Maximum number of results per page", "50")
+            .option("--page [number:int]", "Page number to show", "1")
+            .option("--sort [criterion:relevance|downloads|follows|newest|updated]", "Sort order", "relevance")
+            .option("--category [name]", "Categories filter")
             .option("--no-pager", "Print all results without paging")
             .action(&execute);
         flow_ = flow;
