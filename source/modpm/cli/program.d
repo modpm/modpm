@@ -1,5 +1,7 @@
 module modpm.cli.program;
 
+import std.string : strip;
+
 import cmd.help_command;
 import cmd.program;
 
@@ -7,7 +9,7 @@ import modpm.cli.init_cmd;
 import modpm.cli.install_cmd;
 import modpm.cli.search_cmd;
 
-enum appVersion = "0.1.0";
+enum appVersion = import("VERSION").strip;
 
 final class ModpmProgram : Program
 {
