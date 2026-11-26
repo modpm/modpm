@@ -61,6 +61,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
 
+      - name: Install libcurl development files
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows-static-md
+          "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md\lib;$env:LIB" | Add-Content $env:GITHUB_ENV
+
       - name: Build
         run: dub build --compiler=ldc2 --build=release
 

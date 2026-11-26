@@ -7,11 +7,23 @@
 		"cmd": "~>0.4.0"
 	},
 	"description": "Package manager for Modrinth projects",
+	"dflags-windows-ldc": [
+		"-mscrtlib=msvcrt"
+	],
 	"libs-posix": [
 		"curl"
 	],
 	"libs-windows": [
-		"libcurl"
+		"libcurl",
+		"libzs",
+		"advapi32",
+		"crypt32",
+		"normaliz",
+		"ws2_32",
+		"wldap32",
+		"bcrypt",
+		"iphlpapi",
+		"secur32"
 	],
 	"license": "GPL-3.0-only",
 	"mainSourceFile": "source/app.d",
