@@ -2,7 +2,18 @@ name: Build
 
 on:
   push:
+    branches: [main]
+    paths:
+      - .github/workflows/build.yaml
+      - source
+      - dub.json
+      - dub.selections.json
   pull_request:
+    paths:
+      - .github/workflows/build.yaml
+      - source
+      - dub.json
+      - dub.selections.json
   workflow_dispatch:
   workflow_call:
 
