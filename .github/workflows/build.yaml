@@ -78,6 +78,13 @@ jobs:
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows-static-md-release --overlay-triplets=.github/triplets
           "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md-release\lib;$env:LIB" | Add-Content $env:GITHUB_ENV
 
+      - name: Set release version
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: echo "${TAG#v}" > VERSION
+
       - name: Build
         run: dub build --compiler=ldc2 --build=release
 
