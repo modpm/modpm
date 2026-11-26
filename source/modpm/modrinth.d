@@ -1,12 +1,43 @@
 module modpm.modrinth;
 
-import core.time : dur;
+import core.stdc.config : c_long;
 import std.conv : to;
 import std.json : JSONException, JSONValue;
-import std.net.curl : CurlException, HTTP, HTTPStatusException;
+import std.string : fromStringz, toStringz;
 import std.uri : encodeComponent;
 
+import etc.c.curl;
+
 import modpm.jsonio;
+
+private enum Opt : int
+{
+    writeData = 10001,
+    url = 10002,
+    userAgent = 10018,
+    httpHeader = 10023,
+    postFieldSize = 60,
+    copyPostFields = 10165,
+    lowSpeedLimit = 19,
+    lowSpeedTime = 20,
+    followLocation = 52,
+    connectTimeout = 78,
+    noSignal = 99,
+    writeFunction = 20011,
+}
+
+private enum responseCodeInfo = 2097154;
+
+private extern (C) size_t onBody(char* data, size_t size, size_t count, void* userdata) nothrow
+{
+    auto buffer = cast(ubyte[]*) userdata;
+    immutable bytes = size * count;
+    try
+        *buffer ~= cast(ubyte[]) data[0 .. bytes];
+    catch (Throwable)
+        return 0;
+    return bytes;
+}
 
 class ModrinthException : Exception
 {
@@ -203,6 +234,7 @@ final class ModrinthClient
     {
         userAgent_ = userAgent;
         apiBase_ = apiBase;
+        curl_global_init(cast(c_long) 3);
     }
 
     GameVersion[] fetchGameVersions()
@@ -311,25 +343,43 @@ final class ModrinthClient
     private JsonView request(string url, string postBody = null)
     {
         ubyte[] buffer;
-        try
-        {
-            auto http = HTTP(url);
-            http.setUserAgent(userAgent_);
-            http.connectTimeout = dur!"seconds"(15);
-            http.dataTimeout = dur!"seconds"(30);
-            http.onReceive = (ubyte[] data) { buffer ~= data; return data.length; };
-            if (postBody !is null)
-                http.setPostData(postBody, "application/json");
-            http.perform();
+        auto handle = curl_easy_init();
+        if (handle is null)
+            throw new ModrinthException("network error: cannot start libcurl");
+        scope (exit)
+            curl_easy_cleanup(handle);
 
-            immutable code = http.statusLine.code;
-            if (code / 100 != 2)
-                throw new ModrinthException(describeStatus(code), code);
+        curl_slist* headers;
+        scope (exit)
+            if (headers !is null)
+                curl_slist_free_all(headers);
+
+        curl_easy_setopt(handle, cast(CurlOption) Opt.url, url.toStringz);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.userAgent, userAgent_.toStringz);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.writeFunction, &onBody);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.writeData, cast(void*)&buffer);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.followLocation, cast(c_long) 1);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.noSignal, cast(c_long) 1);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.connectTimeout, cast(c_long) 15);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.lowSpeedLimit, cast(c_long) 1);
+        curl_easy_setopt(handle, cast(CurlOption) Opt.lowSpeedTime, cast(c_long) 30);
+        if (postBody !is null)
+        {
+            headers = curl_slist_append(headers, "Content-Type: application/json");
+            curl_easy_setopt(handle, cast(CurlOption) Opt.httpHeader, headers);
+            curl_easy_setopt(handle, cast(CurlOption) Opt.postFieldSize, cast(c_long) postBody.length);
+            curl_easy_setopt(handle, cast(CurlOption) Opt.copyPostFields, postBody.toStringz);
         }
-        catch (HTTPStatusException e)
-            throw new ModrinthException(describeStatus(e.status), e.status);
-        catch (CurlException e)
-            throw new ModrinthException("network error: " ~ e.msg);
+
+        immutable result = cast(int) curl_easy_perform(handle);
+        if (result != 0)
+            throw new ModrinthException("network error: "
+                    ~ fromStringz(curl_easy_strerror(result)).idup);
+
+        c_long code;
+        curl_easy_getinfo(handle, cast(CurlInfo) responseCodeInfo, &code);
+        if (code / 100 != 2)
+            throw new ModrinthException(describeStatus(cast(int) code), cast(int) code);
 
         try
             return JsonView.parse(cast(string) buffer);
