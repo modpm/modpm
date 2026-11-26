@@ -25,6 +25,15 @@ jobs:
           pattern: modpm-*
           path: artifacts
 
+      - name: Create archives
+        run: |
+          mkdir dist
+          for n in linux-x86_64 linux-aarch64 macos-x86_64 macos-aarch64; do
+            chmod +x "artifacts/modpm-$n/modpm"
+            tar -czf "dist/modpm-$n.tar.gz" -C "artifacts/modpm-$n" modpm
+          done
+          (cd artifacts/modpm-windows-x86_64 && zip -q ../../dist/modpm-windows-x86_64.zip modpm.exe)
+
       - name: Upload to release
         uses: cloudnode-pro/release-upload-asset@v1
         with:
@@ -35,3 +44,8 @@ jobs:
             artifacts/modpm-windows-x86_64/modpm.exe; name=modpm-windows-x86_64.exe
             artifacts/modpm-macos-x86_64/modpm; name=modpm-macos-x86_64
             artifacts/modpm-macos-aarch64/modpm; name=modpm-macos-aarch64
+            dist/modpm-linux-x86_64.tar.gz
+            dist/modpm-linux-aarch64.tar.gz
+            dist/modpm-windows-x86_64.zip
+            dist/modpm-macos-x86_64.tar.gz
+            dist/modpm-macos-aarch64.tar.gz
