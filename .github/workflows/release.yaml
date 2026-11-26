@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yaml
+
+  upload:
+    name: Upload release assets
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: modpm-*
+          path: artifacts
+
+      - name: Upload to release
+        uses: cloudnode-pro/release-upload-asset@v1
+        with:
+          gh-token: ${{ github.token }}
+          files: |-
+            artifacts/modpm-linux-x86_64/modpm; name=modpm-linux-x86_64
+            artifacts/modpm-linux-aarch64/modpm; name=modpm-linux-aarch64
+            artifacts/modpm-windows-x86_64/modpm.exe; name=modpm-windows-x86_64.exe
+            artifacts/modpm-macos-x86_64/modpm; name=modpm-macos-x86_64
+            artifacts/modpm-macos-aarch64/modpm; name=modpm-macos-aarch64

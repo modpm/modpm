@@ -1,0 +1,73 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+
+          - name: windows-x86_64
+            runner: windows-latest
+
+          - name: macos-x86_64
+            runner: macos-26-intel
+
+          - name: macos-aarch64
+            runner: macos-latest
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+
+    env:
+      DUB_HOME: ${{ github.workspace }}/.dub
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup D compiler
+        uses: dlang-community/setup-dlang@v2
+        with:
+          compiler: ldc-latest
+
+      - name: Cache dub packages
+        uses: actions/cache@v6
+        with:
+          path: .dub
+          key: dub-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('dub.json', 'dub.selections.json') }}
+          restore-keys: |
+            dub-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install libcurl development files
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
+
+      - name: Build
+        run: dub build --compiler=ldc2 --build=release
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: modpm-${{ matrix.name }}
+          path: modpm${{ runner.os == 'Windows' && '.exe' || '' }}
+          if-no-files-found: error
+          retention-days: 30
