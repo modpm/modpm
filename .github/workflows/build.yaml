@@ -75,8 +75,8 @@ jobs:
           VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows-static-md-release --overlay-triplets=.github/triplets
-          "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md-release\lib;$env:LIB" | Add-Content $env:GITHUB_ENV
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows-static-release --overlay-triplets=.github/triplets
+          "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-release\lib;$env:LIB" | Add-Content $env:GITHUB_ENV
 
       - name: Set release version
         if: github.event_name == 'release'

@@ -7,9 +7,6 @@
 		"cmd": "~>0.4.0"
 	},
 	"description": "Package manager for Modrinth projects",
-	"dflags-windows-ldc": [
-		"-mscrtlib=msvcrt"
-	],
 	"libs-posix": [
 		"curl"
 	],
