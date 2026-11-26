@@ -165,6 +165,14 @@ final class LoaderRegistry
         }
     }
 
+    Kind scopeKind(const(string)[] loaderIds)
+    {
+        foreach (id; loaderIds)
+            if (auto loader = find(id))
+                return loader.kind;
+        return Kind.mod;
+    }
+
     Kind kindOf(const(string)[] loaderIds)
     {
         enforce(loaderIds.length > 0, "no loaders given");
