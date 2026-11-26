@@ -136,6 +136,23 @@ final class LoaderRegistry
         }
     }
 
+    string projectTypeOf(Kind kind) const pure nothrow @safe
+    {
+        final switch (kind)
+        {
+        case Kind.mod:
+            return "mod";
+        case Kind.plugin:
+            return "plugin";
+        case Kind.datapack:
+            return "datapack";
+        case Kind.resourcepack:
+            return "resourcepack";
+        case Kind.shader:
+            return "shader";
+        }
+    }
+
     string extensionOf(Kind kind) const pure nothrow @safe
     {
         final switch (kind)

@@ -8,12 +8,13 @@ import cmd.program;
 import modpm.cli.init_cmd;
 import modpm.cli.install_cmd;
 import modpm.cli.remove_cmd;
+import modpm.cli.search_cmd;
 
 enum appVersion = import("VERSION").strip;
 
 final class ModpmProgram : Program
 {
-    this(InitCommand initCommand, InstallCommand installCommand, RemoveCommand removeCommand)
+    this(InitCommand initCommand, InstallCommand installCommand, RemoveCommand removeCommand, SearchCommand searchCommand)
     {
         super("modpm");
         description("Package manager for Modrinth projects")
@@ -23,6 +24,7 @@ final class ModpmProgram : Program
             .command(initCommand)
             .command(installCommand)
             .command(removeCommand)
+            .command(searchCommand)
             .command(new HelpCommand());
     }
 }

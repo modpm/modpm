@@ -7,6 +7,7 @@ import modpm.cli.install_cmd;
 import modpm.cli.remove_cmd;
 import modpm.cli.program;
 import modpm.cli.progress_view;
+import modpm.cli.search_cmd;
 import modpm.cli.stage_spinner;
 import modpm.cli.step_printer;
 import modpm.cli.transaction_executor;
@@ -41,5 +42,5 @@ void main(string[] args)
         steps);
 
     new ModpmProgram(new InitCommand(wizard), new InstallCommand(executor, api, new StageSpinner(console)),
-        new RemoveCommand(executor)).run(args);
+        new RemoveCommand(executor), new SearchCommand(api, console, registry)).run(args);
 }
