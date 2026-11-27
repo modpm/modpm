@@ -19,6 +19,9 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
@@ -34,6 +37,26 @@ jobs:
           done
           (cd artifacts/modpm-windows-x86_64 && zip -q ../../dist/modpm-windows-x86_64.zip *)
 
+      - name: Install nfpm
+        run: |
+          echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
+          sudo apt-get update
+          sudo apt-get install -y nfpm
+
+      - name: Build Linux packages
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          for pair in x86_64:amd64 aarch64:arm64; do
+            machine="${pair%%:*}" goarch="${pair##*:}"
+            install -Dm755 "artifacts/modpm-linux-$machine/modpm" dist/modpm
+            export GLIBC_MIN=$(readelf --dyn-syms --wide dist/modpm | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1 | sed 's/^GLIBC_//')
+            for fmt in deb:deb rpm:rpm archlinux:pkg.tar.zst; do
+              VERSION="${TAG#v}" GOARCH="$goarch" nfpm package -f packaging/nfpm.yaml \
+                -p "${fmt%%:*}" -t "dist/modpm-linux-$machine.${fmt#*:}"
+            done
+          done
+
       - name: Upload to release
         uses: cloudnode-pro/release-upload-asset@v1
         with:
@@ -46,6 +69,41 @@ jobs:
             artifacts/modpm-macos-aarch64/modpm; name=modpm-macos-aarch64
             dist/modpm-linux-x86_64.tar.gz
             dist/modpm-linux-aarch64.tar.gz
+            dist/modpm-linux-x86_64.deb
+            dist/modpm-linux-aarch64.deb
+            dist/modpm-linux-x86_64.rpm
+            dist/modpm-linux-aarch64.rpm
+            dist/modpm-linux-x86_64.pkg.tar.zst
+            dist/modpm-linux-aarch64.pkg.tar.zst
             dist/modpm-windows-x86_64.zip
             dist/modpm-macos-x86_64.tar.gz
             dist/modpm-macos-aarch64.tar.gz
+
+  winget:
+    name: Publish to winget
+    needs: upload
+    if: ${{ !github.event.release.prerelease && vars.WINGET_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Submit to winget-pkgs
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: modpm.modpm
+          installers-regex: '\.msi$'
+          token: ${{ secrets.PACKAGING_TOKEN }}
+
+  homebrew:
+    name: Update Homebrew tap
+    needs: upload
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Bump formula
+        uses: dawidd6/action-homebrew-bump-formula@v11
+        with:
+          token: ${{ secrets.PACKAGING_TOKEN }}
+          tap: modpm/homebrew-tap
+          formula: modpm
+          no_fork: true

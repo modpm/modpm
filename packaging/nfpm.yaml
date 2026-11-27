@@ -1,0 +1,58 @@
+# Builds .deb, .rpm and Arch packages from the prebuilt binary at dist/modpm:
+#
+#   VERSION=0.1.0 GOARCH=amd64 GLIBC_MIN=2.34 nfpm package -f packaging/nfpm.yaml -p deb
+#
+# GOARCH is amd64 or arm64. GLIBC_MIN is the newest glibc symbol version the
+# binary uses, which release.yaml reads from the binary.
+name: modpm
+arch: ${GOARCH}
+platform: linux
+version: ${VERSION}
+section: utils
+priority: optional
+maintainer: modpm <contact@zefir.pro>
+description: Package manager for Modrinth projects
+homepage: https://github.com/modpm/modpm
+license: GPL-3.0-only
+
+contents:
+  - src: dist/modpm
+    dst: /usr/bin/modpm
+    file_info:
+      mode: 0755
+
+  # Each format keeps its license text in a different place.
+  - src: COPYING
+    dst: /usr/share/doc/modpm/copyright
+    packager: deb
+  - src: COPYING
+    dst: /usr/share/licenses/modpm/COPYING
+    type: license
+    packager: rpm
+  - src: COPYING
+    dst: /usr/share/licenses/modpm/COPYING
+    packager: archlinux
+
+# libcurl is linked dynamically. `less` is the default pager and modpm works
+# without it, so it is only recommended where weak dependencies exist.
+overrides:
+  deb:
+    depends:
+      - libc6 (>= ${GLIBC_MIN})
+      - libgcc-s1
+      - libcurl4t64 | libcurl4
+    recommends:
+      - less
+  rpm:
+    depends:
+      - glibc >= ${GLIBC_MIN}
+      # soname rather than a package name: Fedora/RHEL call it libcurl, openSUSE libcurl4
+      - libcurl.so.4()(64bit)
+      - less
+  archlinux:
+    depends:
+      - glibc
+      - gcc-libs
+      - curl
+    suggests:
+      - less
