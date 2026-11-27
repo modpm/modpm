@@ -108,6 +108,13 @@ jobs:
           Copy-Item modpm.exe stage
           Copy-Item "$env:VCPKG_BIN\*.dll" stage
 
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          $crt = Get-ChildItem "$vs\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory |
+            Sort-Object FullName | Select-Object -Last 1
+          if (-not $crt) { throw "VC++ runtime redistributable folder not found" }
+          Copy-Item "$($crt.FullName)\vcruntime140*.dll" stage -ErrorAction Stop
+
       - name: Build MSI installer
         if: runner.os == 'Windows'
         shell: pwsh
