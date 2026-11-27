@@ -72,8 +72,9 @@ final class InitWizard
         enforce(!scopeDir.isInitialised(),
             "modpm is already set up in this directory. Delete " ~ scopeDir.path() ~ " to start over.");
         enforce(!(flags.adopt && flags.noAdopt), "--adopt and --no-adopt can't be used together");
+        auto missing = missingFlags(flags, baseDir);
         if (flags.noPrompt)
-            requireFlags(flags, baseDir);
+            enforce(missing.length == 0, "--no-prompt needs these flags: " ~ missing.join(", "));
 
         if (!confirmNesting(flags, baseDir))
             return ExitCode.declined;
@@ -92,7 +93,7 @@ final class InitWizard
         if (!adoptExistingFiles(flags, kind, baseDir, manifest))
             return ExitCode.failure;
 
-        if (!flags.noPrompt && !prompter_.confirm("Is this ok", true))
+        if (missing.length > 0 && !prompter_.confirm("Is this ok", true))
         {
             console_.line("Cancelled. Nothing was written.");
             return ExitCode.declined;
@@ -104,7 +105,7 @@ final class InitWizard
         return ExitCode.ok;
     }
 
-    private void requireFlags(InitFlags flags, string baseDir)
+    private string[] missingFlags(InitFlags flags, string baseDir)
     {
         string[] missing;
         Kind kind;
@@ -130,7 +131,7 @@ final class InitWizard
             && detector_.hasFiles(absolutePath(flags.directory, baseDir), registry_.extensionOf(kind)))
             missing ~= "--adopt or --no-adopt";
 
-        enforce(missing.length == 0, "--no-prompt needs these flags: " ~ missing.join(", "));
+        return missing;
     }
 
     private bool confirmNesting(InitFlags flags, string baseDir)
