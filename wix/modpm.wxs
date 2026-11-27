@@ -1,0 +1,20 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="modpm" Manufacturer="Zefir Kirilov" Version="$(Version)"
+           UpgradeCode="D6F7EFC4-B5D0-4591-BA0B-359914491E33" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of modpm is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="modpm">
+        <!-- modpm.exe and libcurl.dll (+ its dependencies), all in one folder -->
+        <Files Include="$(StageDir)\*" />
+
+        <Component Id="PathEntry" Guid="A13C6220-D200-4061-A8B2-3008B92C0EBC" Bitness="always64">
+          <CreateFolder />
+          <Environment Id="AddToPath" Name="PATH" Value="[INSTALLFOLDER]"
+                       Part="last" Action="set" System="yes" Permanent="no" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Package>
+</Wix>

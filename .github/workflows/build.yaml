@@ -77,7 +77,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .vcpkg-cache
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('.github/triplets/*.cmake') }}
+          key: vcpkg-${{ runner.os }}-curl-dynamic
 
       - name: Install libcurl development files
         if: runner.os == 'Windows'
@@ -86,8 +86,9 @@ jobs:
           VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows-static-release --overlay-triplets=.github/triplets
-          "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-release\lib;$env:LIB" | Add-Content $env:GITHUB_ENV
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows-release
+          "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-release\lib;$env:LIB" | Add-Content $env:GITHUB_ENV
+          "VCPKG_BIN=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-release\bin" | Add-Content $env:GITHUB_ENV
 
       - name: Set release version
         if: github.event_name == 'release'
@@ -99,10 +100,45 @@ jobs:
       - name: Build
         run: dub build --compiler=ldc2 --build=release
 
+      - name: Stage Windows files
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory stage | Out-Null
+          Copy-Item modpm.exe stage
+          Copy-Item "$env:VCPKG_BIN\*.dll" stage
+
+      - name: Build MSI installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = ((Get-Content VERSION).Trim() -split '-')[0]
+          dotnet tool install --global wix --version "6.*"
+          wix build -arch x64 -d "Version=$version" -d "StageDir=$PWD\stage" -o modpm.msi wix/modpm.wxs
+
+      - name: Upload MSI installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: modpm-windows-x86_64-msi
+          path: modpm.msi
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Windows files
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: modpm-windows-x86_64
+          path: stage/*
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload executable
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v7
         with:
           name: modpm-${{ matrix.name }}
-          path: modpm${{ runner.os == 'Windows' && '.exe' || '' }}
+          path: modpm
           if-no-files-found: error
           retention-days: 30

@@ -11,16 +11,7 @@
 		"curl"
 	],
 	"libs-windows": [
-		"libcurl",
-		"libzs",
-		"advapi32",
-		"crypt32",
-		"normaliz",
-		"ws2_32",
-		"wldap32",
-		"bcrypt",
-		"iphlpapi",
-		"secur32"
+		"libcurl"
 	],
 	"license": "GPL-3.0-only",
 	"mainSourceFile": "source/app.d",
