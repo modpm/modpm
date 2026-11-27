@@ -18,11 +18,11 @@ whether to create a nested one.
 ## OPTIONS
 
   * `--loader` <id>:
-    A loader or platform. Can be repeated; all must be of the same kind. See
-    [LOADERS][].
+    A loader or platform. Can be repeated; all must be for the same kind of
+    package.
 
   * `--side` <side>:
-    `client` or `server`, depending on the kind. See [LOADERS][].
+    `client` or `server`.
 
   * `--game-version` <version>:
     The game version, e.g. `1.21.1`.
@@ -45,26 +45,6 @@ whether to create a nested one.
   * `--no-prompt`:
     Never prompt; fail if a value is missing. A nested scope is created without
     asking.
-
-## LOADERS
-
-  * Mods (`.jar`, client or server):
-    `babric`, `bta-babric`, `fabric`, `forge`, `java-agent`, `legacy-fabric`,
-    `liteloader`, `modloader`, `neoforge`, `nilloader`, `ornithe`, `quilt`,
-    `rift`
-
-  * Plugins (`.jar`, server):
-    `bukkit`, `bungeecord`, `folia`, `geyser`, `paper`, `purpur`, `spigot`,
-    `sponge`, `velocity`, `waterfall`
-
-  * Data packs (`.zip`, server):
-    `datapack`
-
-  * Resource packs (`.zip`, client):
-    `minecraft`
-
-  * Shaders (`.zip`, client):
-    `canvas`, `iris`, `optifine`, `vanilla`
 
 ## SEE ALSO
 

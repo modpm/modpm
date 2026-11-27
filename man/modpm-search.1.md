@@ -31,7 +31,7 @@ are listed.
 ## ENVIRONMENT
 
   * `PAGER`:
-    The pager for long results. The default is `less -r`.
+    The pager for long results. The default is `less`.
 
 ## SEE ALSO
 
