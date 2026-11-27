@@ -1,0 +1,6 @@
+# manuals
+modpm(1)          modpm.1
+modpm-init(1)     modpm-init.1
+modpm-install(1)  modpm-install.1
+modpm-remove(1)   modpm-remove.1
+modpm-search(1)   modpm-search.1
