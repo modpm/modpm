@@ -72,12 +72,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
 
-      - name: Cache vcpkg binaries
+      - name: Read runner image version
         if: runner.os == 'Windows'
-        uses: actions/cache@v6
+        shell: pwsh
+        run: |
+          if (-not $env:ImageVersion) { throw "ImageVersion is not set on this runner" }
+          "IMAGE_VERSION=$env:ImageVersion" | Add-Content $env:GITHUB_ENV
+
+      - name: Restore vcpkg binaries
+        id: vcpkg-cache
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@v6
         with:
           path: .vcpkg-cache
-          key: vcpkg-${{ runner.os }}-curl-dynamic
+          key: vcpkg-${{ runner.os }}-${{ env.IMAGE_VERSION }}
 
       - name: Install libcurl development files
         if: runner.os == 'Windows'
@@ -89,6 +97,13 @@ jobs:
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows-release
           "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-release\lib;$env:LIB" | Add-Content $env:GITHUB_ENV
           "VCPKG_BIN=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-release\bin" | Add-Content $env:GITHUB_ENV
+
+      - name: Save vcpkg binaries
+        if: runner.os == 'Windows' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
       - name: Set release version
         if: github.event_name == 'release'
