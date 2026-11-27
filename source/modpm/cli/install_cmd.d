@@ -44,27 +44,58 @@ final class InstallCommand : Command
         {
             auto request = new PlanRequest();
             request.installSuggests = args.hasFlag("install-suggests");
+
+            string[string] localSlugs;
+            foreach (id, entry; session.manifest.installed)
+                if (entry.slug.length)
+                    localSlugs[entry.slug.toLower] = id;
+
+            string localId(string key)
             {
-                scope (failure)
-                    stages_.abort();
-                stages_.begin("Looking up packages", "Looked up packages");
+                if (key in session.manifest.installed)
+                    return key;
+                if (auto id = key.toLower in localSlugs)
+                    return *id;
+                return null;
+            }
 
-                bool[string] wanted;
-                foreach (spec; packages)
+            auto localIds = new string[packages.length];
+            auto localVersions = new string[packages.length];
+            bool[string] wanted;
+            foreach (i, spec; packages)
+            {
+                immutable at = spec.lastIndexOf('@');
+                if (at > 0)
                 {
-                    wanted[spec] = true;
-                    immutable at = spec.lastIndexOf('@');
-                    if (at > 0)
-                        wanted[spec[0 .. at]] = true;
+                    localIds[i] = localId(spec[0 .. at]);
+                    if (localIds[i].length)
+                        localVersions[i] = spec[at + 1 .. $];
                 }
+                if (localIds[i].length == 0)
+                    localIds[i] = localId(spec);
+                if (localIds[i].length)
+                    continue;
+                wanted[spec] = true;
+                if (at > 0)
+                    wanted[spec[0 .. at]] = true;
+            }
 
+            {
+                immutable lookingUp = wanted.length > 0;
+                scope (failure)
+                    if (lookingUp)
+                        stages_.abort();
                 ProjectInfo[string] byId;
                 ProjectInfo[string] bySlug;
-                foreach (id, project; api_.fetchProjects(wanted.keys))
+                if (lookingUp)
                 {
-                    request.projects[id] = project;
-                    byId[id] = project;
-                    bySlug[project.slug.toLower] = project;
+                    stages_.begin("Looking up packages", "Looked up packages");
+                    foreach (id, project; api_.fetchProjects(wanted.keys))
+                    {
+                        request.projects[id] = project;
+                        byId[id] = project;
+                        bySlug[project.slug.toLower] = project;
+                    }
                 }
 
                 ProjectInfo lookup(string key)
@@ -78,43 +109,53 @@ final class InstallCommand : Command
 
                 string[] problems;
                 bool[string] seen;
-                foreach (spec; packages)
+                foreach (i, spec; packages)
                 {
-                    ProjectInfo project;
-                    string versionNumber;
-                    immutable at = spec.lastIndexOf('@');
-                    if (at > 0)
+                    string projectId = localIds[i];
+                    string versionNumber = localVersions[i];
+                    string name;
+                    if (projectId.length)
+                        name = session.manifest.installed[projectId].title;
+                    else
                     {
-                        project = lookup(spec[0 .. at]);
-                        versionNumber = spec[at + 1 .. $];
+                        ProjectInfo project;
+                        immutable at = spec.lastIndexOf('@');
+                        if (at > 0)
+                        {
+                            project = lookup(spec[0 .. at]);
+                            versionNumber = spec[at + 1 .. $];
+                        }
+                        if (project is null)
+                        {
+                            project = lookup(spec);
+                            versionNumber = "";
+                        }
+                        if (project is null)
+                        {
+                            problems ~= format("no such project: %s", spec);
+                            continue;
+                        }
+                        if (project.projectType == "modpack")
+                        {
+                            problems ~= format("%s is a modpack, which modpm doesn't support",
+                                project.displayName);
+                            continue;
+                        }
+                        projectId = project.id;
+                        name = project.displayName;
                     }
-                    if (project is null)
+                    if (projectId in seen)
                     {
-                        project = lookup(spec);
-                        versionNumber = "";
-                    }
-                    if (project is null)
-                    {
-                        problems ~= format("no such project: %s", spec);
+                        problems ~= format("%s is listed twice", name);
                         continue;
                     }
-                    if (project.projectType == "modpack")
-                    {
-                        problems ~= format("%s is a modpack, which modpm doesn't support",
-                            project.displayName);
-                        continue;
-                    }
-                    if (project.id in seen)
-                    {
-                        problems ~= format("%s is listed twice", project.displayName);
-                        continue;
-                    }
-                    seen[project.id] = true;
-                    request.install ~= new Request(project.id, versionNumber);
+                    seen[projectId] = true;
+                    request.install ~= new Request(projectId, versionNumber);
                 }
                 if (problems.length)
                     throw new PlanProblems(problems);
-                stages_.end();
+                if (lookingUp)
+                    stages_.end();
             }
 
             auto plan = executor_.plan(session, request, stages_);
