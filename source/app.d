@@ -2,7 +2,6 @@ module app;
 
 import modpm.cli.console;
 import modpm.cli.init_cmd;
-import modpm.cli.init_wizard;
 import modpm.cli.install_cmd;
 import modpm.cli.remove_cmd;
 import modpm.cli.program;
@@ -29,18 +28,12 @@ void main(string[] args)
     auto registry = new LoaderRegistry();
     auto hasher = new FileHasher();
     auto prompter = new TuiPrompter(new Terminal(), console);
-    auto wizard = new InitWizard(
-        registry,
-        api,
-        prompter,
-        console,
-        new FilesystemChecker(),
-        new Detector(api, hasher));
     auto downloader = new Downloader(userAgent, hasher, new ProgressView(console));
     auto steps = new StepPrinter(console);
     auto executor = new TransactionExecutor(registry, api, downloader, hasher, prompter, console,
         steps);
 
-    new ModpmProgram(new InitCommand(wizard), new InstallCommand(executor, api, new StageSpinner(console)),
+    new ModpmProgram(new InitCommand(registry, api, prompter, console, new FilesystemChecker(),
+        new Detector(api, hasher)), new InstallCommand(executor, api, new StageSpinner(console)),
         new RemoveCommand(executor), new SearchCommand(api, console, registry)).run(args);
 }
