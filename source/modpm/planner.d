@@ -140,11 +140,15 @@ final class Planner
         auto resolution = new Resolution();
         if (requests.length)
         {
-            stageBegin("Loading package versions", "Loaded package versions");
             foreach (item; requests)
-                metadata.needProject(item.projectId);
-            fetchNeeds(metadata);
-            stageEnd();
+                if (needsLookup(item))
+                    metadata.needProject(item.projectId);
+            if (metadata.hasNeeds())
+            {
+                stageBegin("Loading package versions", "Loaded package versions");
+                fetchNeeds(metadata);
+                stageEnd();
+            }
 
             stageBegin("Resolving dependencies", "Resolved dependencies");
             resolution = resolveUntilSettled(requests, metadata);
@@ -164,7 +168,8 @@ final class Planner
 
         string[] ids;
         foreach (selection; resolution.selections)
-            ids ~= selection.projectId;
+            if (selection.version_ !is null)
+                ids ~= selection.projectId;
         ensureProjects(ids);
 
         auto builder = buildTransaction(resolution, problems);
@@ -195,6 +200,13 @@ final class Planner
     {
         if (observer_ !is null)
             observer_.abort();
+    }
+
+    private bool needsLookup(Request request)
+    {
+        auto installed = request.projectId in base_.installed;
+        return installed is null
+            || (request.versionNumber.length && request.versionNumber != installed.versionNumber);
     }
 
     private Resolution resolveUntilSettled(Request[] requests, Metadata metadata)
@@ -255,7 +267,6 @@ final class Planner
 
         foreach (selection; resolution.selections)
         {
-            auto project = projects_[selection.projectId];
             Entry from;
             if (selection.installed !is null)
             {
@@ -271,6 +282,7 @@ final class Planner
             }
             else
             {
+                auto project = projects_[selection.projectId];
                 auto chosen = selection.version_;
                 to = new Entry();
                 to.slug = project.slug;
@@ -309,8 +321,12 @@ final class Planner
     {
         string[] ids;
         foreach (operation; transaction.operations)
-            if (operation.from !is null && !metadata.knowsVersion(operation.from.versionId))
+        {
+            if (operation.from is null || (operation.to !is null && !operation.placesFile))
+                continue;
+            if (!metadata.knowsVersion(operation.from.versionId))
                 ids ~= operation.from.versionId;
+        }
         if (ids.length == 0)
             return;
         try
