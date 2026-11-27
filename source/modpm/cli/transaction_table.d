@@ -90,9 +90,17 @@ final class TransactionTable
             }
         }
 
-        immutable fixed = 1 + 2 + versionWidth_ + (showChannel_ ? 2 + channelWidth_ : 0)
-            + 2 + sizeWidth;
-        nameWidth = max(nameWidth, console_.width > fixed ? console_.width - fixed : 0);
+        immutable natural = 1 + nameWidth + 2 + versionWidth_
+            + (showChannel_ ? 2 + channelWidth_ : 0) + 2 + sizeWidth;
+        if (console_.width > natural)
+        {
+            immutable extra = console_.width - natural;
+            immutable shared_ = showChannel_ ? 3 : 2;
+            nameWidth += extra / shared_ + extra % shared_;
+            versionWidth_ += extra / shared_;
+            if (showChannel_)
+                channelWidth_ += extra / shared_;
+        }
 
         console_.line(console_.bold(left("Package", nameWidth + 1)) ~ "  "
                 ~ console_.bold(left("Version", versionWidth_))
