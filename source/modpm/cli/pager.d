@@ -5,31 +5,33 @@ import std.stdio : stdout;
 import std.string : split;
 
 /**
- * Writes text through a pager when it is likely to overflow the screen,
- * or directly to stdout otherwise.
+ * Writes text through a pager, or directly to stdout otherwise.
  *
  * A custom pager can be set with the PAGER environment variable.
  * Paging is skipped when not attached to a terminal, when `noPager` is
- * set, when the text fits on the screen, or when the pager cannot be
- * started.
+ * set, or when the pager cannot be started.
  */
-void page(string text, bool noPager, bool isTerminal, size_t height)
+void page(string title, string text, bool noPager, bool isTerminal)
 {
-    if (noPager || !isTerminal || fitsOnScreen(text, height))
+    if (noPager || !isTerminal)
     {
         stdout.write(text);
         stdout.flush();
         return;
     }
 
-    string[] command = ["less", "-r"];
+    string[] command = ["less"];
     immutable customPager = environment.get("PAGER");
     if (customPager.length)
         command = customPager.split();
 
     try
     {
-        auto pipes = pipeProcess(command, Redirect.stdin);
+        string[string] env;
+        if (!environment.get("LESS").length)
+            env["LESS"] = "FrPs" ~ title ~ " ?ltline %lt?e (END). (press h for help or q to quit)";
+
+        auto pipes = pipeProcess(command, Redirect.stdin, env);
         pipes.stdin.write(text);
         pipes.stdin.close();
         wait(pipes.pid);
@@ -39,15 +41,4 @@ void page(string text, bool noPager, bool isTerminal, size_t height)
         stdout.write(text);
         stdout.flush();
     }
-}
-
-private bool fitsOnScreen(string text, size_t height)
-{
-    size_t lines = 0;
-    foreach (ch; text)
-        if (ch == '\n')
-            lines++;
-    if (text.length && text[$ - 1] != '\n')
-        lines++;
-    return lines <= height;
 }

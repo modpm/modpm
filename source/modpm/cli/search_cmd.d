@@ -152,7 +152,7 @@ final class SearchCommand : Command
                                 ~ console_.dim(" to see the next page."));
         }
 
-        page(output.data, options.noPager, console_.terminal, console_.height);
+        page("Results for \"" ~ options.query ~ '"', output.data, options.noPager, console_.terminal);
         return ExitCode.ok;
     }
 
