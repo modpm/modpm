@@ -19,6 +19,7 @@ else version (Posix)
 final class Console
 {
     private bool colors_;
+    private bool escapes_;
     private bool terminal_;
 
     this()
@@ -26,7 +27,8 @@ final class Console
         version (Windows)
             SetConsoleOutputCP(65001);
         terminal_ = isTerminal();
-        colors_ = supportsColor();
+        escapes_ = supportsEscapes();
+        colors_ = escapes_ && environment.get("NO_COLOR").length == 0;
     }
 
     @property bool terminal() const
@@ -141,7 +143,7 @@ final class Console
 
     string link(string url, string text) const
     {
-        return colors_ ? "\x1b]8;;" ~ url ~ "\x1b\\" ~ text ~ "\x1b]8;;\x1b\\" : text;
+        return escapes_ ? "\x1b]8;;" ~ url ~ "\x1b\\" ~ text ~ "\x1b]8;;\x1b\\" : text;
     }
 
     private string paint(string code, string text) const
@@ -164,11 +166,8 @@ final class Console
             return false;
     }
 
-    private static bool supportsColor()
+    private static bool supportsEscapes()
     {
-        if (environment.get("NO_COLOR").length)
-            return false;
-
         version (Posix)
         {
             return isatty(1) != 0;

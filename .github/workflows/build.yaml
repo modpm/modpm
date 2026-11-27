@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - .github/workflows/build.yaml
-      - source
+      - source/**
       - dub.json
       - dub.selections.json
   pull_request:
     paths:
       - .github/workflows/build.yaml
-      - source
+      - source/**
       - dub.json
       - dub.selections.json
   workflow_dispatch:
