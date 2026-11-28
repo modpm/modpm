@@ -8,6 +8,7 @@ import cmd.command;
 import cmd.parsed_args;
 
 import modpm.cli.transaction_executor;
+import modpm.manifest;
 import modpm.planner;
 import modpm.transaction_builder;
 
@@ -19,10 +20,21 @@ final class RemoveCommand : Command
     {
         super("remove")
             .description("Remove packages and the dependencies nothing else uses")
-            .argument("<packages...>", "Packages to remove, by slug")
+            .argument("<packages...>", "Packages to remove, by slug", (string prefix) => installedSlugs())
             .option("-y, --yes", "Don't ask for confirmation")
             .action(&execute);
         executor_ = executor;
+    }
+
+    private static string[] installedSlugs()
+    {
+        string[] slugs;
+        auto scopeDir = ScopeDirectory.findEnclosing(getcwd());
+        if (scopeDir is null)
+            return slugs;
+        foreach (entry; scopeDir.load().installed)
+            slugs ~= entry.slug;
+        return slugs;
     }
 
     private int execute(ParsedArgs args)

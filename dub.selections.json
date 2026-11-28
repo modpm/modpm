@@ -1,6 +1,9 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"cmd": "0.4.0"
+		"cmd": "0.7.0",
+		"fluent-asserts": "2.1.0",
+		"libdparse": "0.25.1",
+		"silly": "1.2.0-dev.2"
 	}
 }

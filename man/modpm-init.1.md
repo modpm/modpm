@@ -46,6 +46,26 @@ whether to create a nested one.
     Never prompt; fail if a value is missing. A nested scope is created without
     asking.
 
+## ENVIRONMENT
+
+Each of these provides the value of an option that isn't given on the command
+line. The command line takes precedence. An empty variable counts as not set.
+
+  * `MODPM_LOADER`:
+    The loader, for `--loader`. Only one loader can be given this way.
+
+  * `MODPM_SIDE`:
+    The side, for `--side`.
+
+  * `MODPM_GAME_VERSION`:
+    The game version, for `--game-version`.
+
+  * `MODPM_CHANNEL`:
+    The release channel, for `--channel`.
+
+  * `MODPM_DIR`:
+    The packages directory, for `--dir`.
+
 ## SEE ALSO
 
 modpm(1)

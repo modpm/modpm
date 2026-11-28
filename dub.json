@@ -4,7 +4,7 @@
 	],
 	"copyright": "Copyright © 2026 Zefir Kirilov",
 	"dependencies": {
-		"cmd": "~>0.4.0"
+		"cmd": "~>0.7.0"
 	},
 	"description": "Package manager for Modrinth projects",
 	"libs-posix": [

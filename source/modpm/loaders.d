@@ -79,6 +79,14 @@ final class LoaderRegistry
         ];
     }
 
+    string[] ids() const
+    {
+        string[] result;
+        foreach (loader; loaders_)
+            result ~= loader.id;
+        return result;
+    }
+
     Loader find(string id)
     {
         foreach (loader; loaders_)
