@@ -9,6 +9,7 @@ import std.string : endsWith, split, strip;
 import std.uni : toLower;
 
 import cmd.command;
+import cmd.option;
 import cmd.parsed_args;
 
 import modpm.cli.console;
@@ -47,9 +48,11 @@ final class SearchCommand : Command
         super("search")
             .description("Search Modrinth for packages compatible with this scope")
             .argument("<terms...>", "Search terms")
-            .option("--limit [count:int]", "Maximum number of results per page", "50")
+            .add(Option.fromString("--limit [count:int]", "Maximum number of results per page", "50")
+                    .env("MODPM_SEARCH_LIMIT"))
             .option("--page [number:int]", "Page number to show", "1")
-            .option("--sort [criterion:relevance|downloads|follows|newest|updated]", "Sort order", "relevance")
+            .add(Option.fromString("--sort [criterion:relevance|downloads|follows|newest|updated]", "Sort order",
+                    "relevance").env("MODPM_SEARCH_SORT"))
             .option("--category [name]", "Categories filter")
             .option("--no-pager", "Print all results without paging")
             .action(&execute);

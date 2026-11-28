@@ -14,6 +14,7 @@ import std.uni : toLower;
 import std.utf : count;
 
 import cmd.command;
+import cmd.option;
 import cmd.parsed_args;
 
 import modpm.cli.console;
@@ -40,11 +41,17 @@ final class InitCommand : Command
     {
         super("init")
             .description("Create a modpm scope in the current directory")
-            .option("--loader [id]", "Compatible platforms/loaders")
-            .option("--side [side:client|server]", "Type of the environment")
-            .option("--game-version [version]", "Game version, e.g. 1.21.1")
-            .option("--channel [channel:release|beta|alpha]", "Release channel")
-            .option("--dir [path:dir]", "Directory the files are managed in")
+            .add(Option.fromString("--loader [id]", "Compatible platforms/loaders")
+                    .completer((string prefix) => registry.ids())
+                    .env("MODPM_LOADER"))
+            .add(Option.fromString("--side [side:client|server]", "Type of the environment")
+                    .env("MODPM_SIDE"))
+            .add(Option.fromString("--game-version [version]", "Game version, e.g. 1.21.1")
+                    .env("MODPM_GAME_VERSION"))
+            .add(Option.fromString("--channel [channel:release|beta|alpha]", "Release channel")
+                    .env("MODPM_CHANNEL"))
+            .add(Option.fromString("--dir [path:dir]", "Directory the files are managed in")
+                    .env("MODPM_DIR"))
             .option("--adopt", "Detect and import the files already in the directory")
             .option("--no-adopt", "Don't detect the files already in the directory")
             .option("--no-prompt", "Never prompt: fail if a value is missing")

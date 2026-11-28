@@ -30,6 +30,12 @@ are listed.
 
 ## ENVIRONMENT
 
+  * `MODPM_SEARCH_LIMIT`:
+    The results per page, when `--limit` is not given.
+
+  * `MODPM_SEARCH_SORT`:
+    The sort order, when `--sort` is not given.
+
   * `PAGER`:
     The pager for long results. The default is `less`.
 

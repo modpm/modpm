@@ -2,6 +2,7 @@ module modpm.cli.program;
 
 import std.string : strip;
 
+import cmd.completion_command;
 import cmd.help_command;
 import cmd.program;
 
@@ -25,6 +26,7 @@ final class ModpmProgram : Program
             .command(installCommand)
             .command(removeCommand)
             .command(searchCommand)
+            .command(new CompletionCommand())
             .command(new HelpCommand());
     }
 }
