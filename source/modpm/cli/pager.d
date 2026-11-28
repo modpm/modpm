@@ -1,15 +1,14 @@
 module modpm.cli.pager;
 
-import std.process : environment, pipeProcess, wait, Redirect;
+import std.format : format;
+import std.process : environment, pipeShell, wait, Redirect;
 import std.stdio : stdout;
-import std.string : split;
 
 /**
  * Writes text through a pager, or directly to stdout otherwise.
  *
  * A custom pager can be set with the PAGER environment variable.
- * Paging is skipped when not attached to a terminal, when `noPager` is
- * set, or when the pager cannot be started.
+ * Paging is skipped when not attached to a terminal or when `noPager` is set.
  */
 void page(string title, string text, bool noPager, bool isTerminal)
 {
@@ -20,25 +19,17 @@ void page(string title, string text, bool noPager, bool isTerminal)
         return;
     }
 
-    string[] command = ["less"];
     immutable customPager = environment.get("PAGER");
-    if (customPager.length)
-        command = customPager.split();
+    immutable pager = customPager.length ? customPager : "less";
 
-    try
-    {
-        string[string] env;
-        if (!environment.get("LESS").length)
-            env["LESS"] = "FrPs" ~ title ~ " ?ltline %lt?e (END). (press h for help or q to quit)";
+    string[string] env;
+    if (!environment.get("LESS").length)
+        env["LESS"] = "FrPs" ~ title ~ " ?ltline %lt?e (END). (press h for help or q to quit)";
 
-        auto pipes = pipeProcess(command, Redirect.stdin, env);
-        pipes.stdin.write(text);
-        pipes.stdin.close();
-        wait(pipes.pid);
-    }
-    catch (Exception)
-    {
-        stdout.write(text);
-        stdout.flush();
-    }
+    auto pipes = pipeShell(pager, Redirect.stdin, env);
+    pipes.stdin.write(text);
+    pipes.stdin.close();
+    immutable status = wait(pipes.pid);
+    if (status != 0)
+        throw new Exception(format("pager '%s' exited with status %s", pager, status));
 }
